@@ -86,4 +86,4 @@ scheduler.start()
 ```
 
 See https://github.com/hkaya/cortex-transit for a more comprehensive implementation.
-  
+
