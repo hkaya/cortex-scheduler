@@ -1,4 +1,4 @@
-# Cortex Scheduler
+# Cortex Scheduler [![Build Status](https://travis-ci.org/hkaya/cortex-scheduler.svg?branch=master)](https://travis-ci.org/hkaya/cortex-scheduler)
 
 Scheduler is a simple library for Cortex apps to view a set of pages in order.
 
