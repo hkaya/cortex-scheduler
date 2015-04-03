@@ -21,18 +21,27 @@ class Scheduler
 
     @slots = {}
     @viewOrder = []
+    @fallbackSlots = {}
+    @fallbackViewOrder = []
     @current = 0
     @defaultView = defaultView
 
-  register: (sname) ->
+  register: (sname, fallback) ->
     if not @slots[sname]?
       @slots[sname] = []
 
     @viewOrder.push sname
 
+    if not not fallback
+      if not @fallbackSlots[fallback]?
+        @fallbackSlots[fallback] = []
+        @fallbackViewOrder.push fallback
+
   submit: (sname, view) ->
     if sname of @slots
       @slots[sname].push view
+    else if sname of @fallbackSlots
+      @fallbackSlots[sname].push view
     else
       throw "Scheduler doesn't know about slot: #{sname}"
 
@@ -59,7 +68,7 @@ class Scheduler
         else
           checked++
           if checked >= @viewOrder.length
-            @defaultView done
+            @_viewFallbackElseDefaultView done
             break
 
   _tryToViewCurrent: (done) ->
@@ -79,5 +88,17 @@ class Scheduler
       true
     else
       false
+
+  _viewFallbackElseDefaultView: (done) ->
+    if @fallbackViewOrder.length > 0
+      for sname in @fallbackViewOrder
+        slot = @fallbackSlots[sname]
+        if slot.length > 0
+          console.log "Displaying a fallback view from slot: #{sname}"
+          fallback = slot.shift()
+          fallback done
+          return
+
+    @defaultView done
 
 module.exports = Scheduler

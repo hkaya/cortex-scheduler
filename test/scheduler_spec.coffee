@@ -41,6 +41,40 @@ describe 'Scheduler', ->
       expect(@scheduler.viewOrder).to.have.length 3
       expect(@scheduler.viewOrder).to.deep.equal ['test-view', 'test-view', 'another-view']
 
+    it 'should create a fallback slot', ->
+      @scheduler.register('test-view', 'fallback')
+      expect(@scheduler.slots).to.have.key 'test-view'
+      expect(@scheduler.viewOrder).to.have.length 1
+      expect(@scheduler.viewOrder).to.contain 'test-view'
+      expect(@scheduler.fallbackSlots).to.have.key 'fallback'
+      expect(@scheduler.fallbackViewOrder).to.have.length 1
+      expect(@scheduler.fallbackViewOrder).to.contain 'fallback'
+
+    it 'should update the fallback order only when a new fallback slot added', ->
+      @scheduler.register('test-view', 'fallback')
+      expect(@scheduler.slots).to.have.key 'test-view'
+      expect(@scheduler.viewOrder).to.have.length 1
+      expect(@scheduler.viewOrder).to.contain 'test-view'
+      expect(@scheduler.fallbackSlots).to.have.key 'fallback'
+      expect(@scheduler.fallbackViewOrder).to.have.length 1
+
+      @scheduler.register('test-view', 'fallback')
+      expect(@scheduler.slots).to.have.key 'test-view'
+      expect(@scheduler.viewOrder).to.have.length 2
+      expect(@scheduler.viewOrder).to.deep.equal ['test-view', 'test-view']
+      expect(@scheduler.fallbackSlots).to.have.key 'fallback'
+      expect(@scheduler.fallbackViewOrder).to.have.length 1
+
+      @scheduler.register('another-view', 'another-fallback')
+      expect(@scheduler.slots).to.have.property 'test-view'
+      expect(@scheduler.slots).to.have.property 'another-view'
+      expect(@scheduler.viewOrder).to.have.length 3
+      expect(@scheduler.viewOrder).to.deep.equal ['test-view', 'test-view', 'another-view']
+      expect(@scheduler.fallbackViewOrder).to.have.length 2
+      expect(@scheduler.fallbackSlots).to.have.property 'fallback'
+      expect(@scheduler.fallbackSlots).to.have.property 'another-fallback'
+      expect(@scheduler.fallbackViewOrder).to.deep.equal ['fallback', 'another-fallback']
+
   describe 'submit', ->
     it 'should fail if the slot does not exist', ->
       expect(=> @scheduler.submit('test-view', ->)).to.throw /Scheduler doesn't know about slot/
@@ -67,6 +101,16 @@ describe 'Scheduler', ->
       @scheduler.submit 'first-view', fview2
       expect(@scheduler.slots['second-view']).to.deep.equal [sview]
       expect(@scheduler.slots['first-view']).to.deep.equal [fview, fview2]
+
+    it 'should add the view to the fallback slot', ->
+      @scheduler.register 'primary', 'fallback'
+      expect(@scheduler.slots['primary']).to.have.length 0
+      expect(@scheduler.fallbackSlots['fallback']).to.have.length 0
+
+      fview = (done) ->
+      @scheduler.submit 'fallback', fview
+      expect(@scheduler.slots['primary']).to.have.length 0
+      expect(@scheduler.fallbackSlots['fallback']).to.have.length 1
 
   describe 'run', ->
     describe 'tryToViewCurrent', ->
@@ -113,6 +157,19 @@ describe 'Scheduler', ->
 
       scheduler = new Scheduler defaultView
       scheduler._run()
+
+    it 'should run a fallback view if there are no available views', ->
+      defaultView = sinon.spy()
+      fallbackView = sinon.spy()
+
+      scheduler = new Scheduler defaultView
+      scheduler.register 'first', 'fallback'
+      scheduler.register 'second'
+      scheduler.submit 'fallback', fallbackView
+      scheduler._run()
+
+      expect(defaultView).to.not.have.been.called
+      expect(fallbackView).to.have.been.called
 
     it 'should run default view if there are no available views', (done) ->
       defaultView = (cb) =>
