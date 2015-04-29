@@ -14,6 +14,8 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
+CortexEventApi = window.Cortex?.event
+
 class Scheduler
   constructor: (defaultView) ->
     if not defaultView?
@@ -58,6 +60,7 @@ class Scheduler
     if @viewOrder.length == 0
       # no view slots. show default view.
       @defaultView done
+      @_publishEvent 'Default View'
 
     else
       checked = 0
@@ -85,6 +88,7 @@ class Scheduler
     if cslot.length > 0
       view = cslot.shift()
       view done
+      @_publishEvent sname
       true
     else
       false
@@ -97,8 +101,14 @@ class Scheduler
           console.log "Displaying a fallback view from slot: #{sname}"
           fallback = slot.shift()
           fallback done
+          @_publishEvent sname
           return
 
     @defaultView done
+    @_publishEvent 'Default View'
+
+  _publishEvent: (name) ->
+    if CortexEventApi?
+      CortexEventApi.publish name
 
 module.exports = Scheduler
