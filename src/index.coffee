@@ -167,7 +167,7 @@ class Scheduler
     div.innerHTML = view.view
 
   _renderVideoView: (div, view, done) ->
-    @onVideoView? @document, div, view.file, (
+    @onVideoView? div, view.file, (
       =>
         done view.slot
         @_onViewEnd view.slot
