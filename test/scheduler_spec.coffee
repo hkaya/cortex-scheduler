@@ -3,251 +3,488 @@ sinon     = require 'sinon'
 
 Scheduler = require '../src/index'
 
+DEFAULT_VIEW = '__dv'
+BLACK_SCREEN = '__bs'
+
 describe 'Scheduler', ->
   beforeEach ->
-    @scheduler = new Scheduler ->
+    @scheduler = new Scheduler (->), (->)
 
   afterEach ->
 
-  it 'should fail if no default view provided', ->
-    expect(-> new Scheduler()).to.throw 'Scheduler needs a valid default view.'
-    expect(-> new Scheduler(undefined)).to.throw 'Scheduler needs a valid default view.'
-    expect(-> new Scheduler(null)).to.throw 'Scheduler needs a valid default view.'
-    expect(-> new Scheduler(->)).to.not.throw 'Scheduler needs a valid default view.'
-
   describe 'register', ->
-    it 'should create a new slot', ->
-      @scheduler.register('test-view')
-      expect(@scheduler.slots).to.have.key 'test-view'
-      expect(@scheduler.viewOrder).to.have.length 1
-      expect(@scheduler.viewOrder).to.contain 'test-view'
+    it 'should add a default slot', ->
+      expect(@scheduler._slots).to.have.key DEFAULT_VIEW
+      expect(@scheduler._slots[DEFAULT_VIEW]).to.have.length 0
 
-    it 'should update the view order', ->
-      @scheduler.register('test-view')
-      expect(@scheduler.slots['test-view']).to.have.length 0
-      expect(@scheduler.viewOrder).to.have.length 1
-      expect(@scheduler.viewOrder).to.deep.equal ['test-view']
+    it 'should register a slot', ->
+      expect(@scheduler._slots).to.not.have.key 'view'
+      expect(@scheduler._viewOrder).to.have.length 0
 
-      @scheduler.slots['test-view'].push (->)
+      @scheduler.register 'view'
+      expect(@scheduler._slots.view).to.have.length 0
+      expect(@scheduler._viewOrder).to.deep.equal ['view']
 
-      @scheduler.register('test-view')
-      expect(@scheduler.slots['test-view']).to.have.length 1
-      expect(@scheduler.viewOrder).to.have.length 2
-      expect(@scheduler.viewOrder).to.deep.equal ['test-view', 'test-view']
+    it 'should create a slot for the fallback view', ->
+      @scheduler.register 'view', 'fallback'
+      expect(@scheduler._slots.view).to.have.length 0
+      expect(@scheduler._viewOrder).to.deep.equal ['view']
 
-      @scheduler.register('another-view')
-      expect(@scheduler.slots['test-view']).to.have.length 1
-      expect(@scheduler.slots['another-view']).to.have.length 0
-      expect(@scheduler.viewOrder).to.have.length 3
-      expect(@scheduler.viewOrder).to.deep.equal ['test-view', 'test-view', 'another-view']
+      expect(@scheduler._fallbackSlots.fallback).to.have.length 0
+      expect(@scheduler._fallbackViewOrder).to.deep.equal ['fallback']
 
-    it 'should create a fallback slot', ->
-      @scheduler.register('test-view', 'fallback')
-      expect(@scheduler.slots).to.have.key 'test-view'
-      expect(@scheduler.viewOrder).to.have.length 1
-      expect(@scheduler.viewOrder).to.contain 'test-view'
-      expect(@scheduler.fallbackSlots).to.have.key 'fallback'
-      expect(@scheduler.fallbackViewOrder).to.have.length 1
-      expect(@scheduler.fallbackViewOrder).to.contain 'fallback'
+    it 'should only update view order on duplicate registrations', ->
+      @scheduler.register 'view'
+      expect(@scheduler._slots.view).to.have.length 0
+      expect(@scheduler._viewOrder).to.deep.equal ['view']
 
-    it 'should update the fallback order only when a new fallback slot added', ->
-      @scheduler.register('test-view', 'fallback')
-      expect(@scheduler.slots).to.have.key 'test-view'
-      expect(@scheduler.viewOrder).to.have.length 1
-      expect(@scheduler.viewOrder).to.contain 'test-view'
-      expect(@scheduler.fallbackSlots).to.have.key 'fallback'
-      expect(@scheduler.fallbackViewOrder).to.have.length 1
+      @scheduler.register 'view'
+      expect(@scheduler._slots.view).to.have.length 0
+      expect(@scheduler._viewOrder).to.deep.equal ['view', 'view']
 
-      @scheduler.register('test-view', 'fallback')
-      expect(@scheduler.slots).to.have.key 'test-view'
-      expect(@scheduler.viewOrder).to.have.length 2
-      expect(@scheduler.viewOrder).to.deep.equal ['test-view', 'test-view']
-      expect(@scheduler.fallbackSlots).to.have.key 'fallback'
-      expect(@scheduler.fallbackViewOrder).to.have.length 1
+    it 'should not update fallback view order on duplicate registrations with fallback', ->
+      @scheduler.register 'view', 'fallback'
+      expect(@scheduler._slots.view).to.have.length 0
+      expect(@scheduler._viewOrder).to.deep.equal ['view']
+      expect(@scheduler._fallbackSlots.fallback).to.have.length 0
+      expect(@scheduler._fallbackViewOrder).to.deep.equal ['fallback']
 
-      @scheduler.register('another-view', 'another-fallback')
-      expect(@scheduler.slots).to.have.property 'test-view'
-      expect(@scheduler.slots).to.have.property 'another-view'
-      expect(@scheduler.viewOrder).to.have.length 3
-      expect(@scheduler.viewOrder).to.deep.equal ['test-view', 'test-view', 'another-view']
-      expect(@scheduler.fallbackViewOrder).to.have.length 2
-      expect(@scheduler.fallbackSlots).to.have.property 'fallback'
-      expect(@scheduler.fallbackSlots).to.have.property 'another-fallback'
-      expect(@scheduler.fallbackViewOrder).to.deep.equal ['fallback', 'another-fallback']
+      @scheduler.register 'another', 'fallback'
+      expect(@scheduler._slots.view).to.have.length 0
+      expect(@scheduler._slots.another).to.have.length 0
+      expect(@scheduler._viewOrder).to.deep.equal ['view', 'another']
+      expect(@scheduler._fallbackSlots.fallback).to.have.length 0
+      expect(@scheduler._fallbackViewOrder).to.deep.equal ['fallback']
 
-  describe 'submit', ->
-    it 'should fail if the slot does not exist', ->
-      expect(=> @scheduler.submit('test-view', ->)).to.throw /Scheduler doesn't know about slot/
+      @scheduler.register 'view', 'fallback'
+      expect(@scheduler._slots.view).to.have.length 0
+      expect(@scheduler._slots.another).to.have.length 0
+      expect(@scheduler._viewOrder).to.deep.equal ['view', 'another', 'view']
+      expect(@scheduler._fallbackSlots.fallback).to.have.length 0
+      expect(@scheduler._fallbackViewOrder).to.deep.equal ['fallback']
 
-    it 'should add the view to proper slot', ->
-      @scheduler.register('first-view')
-      expect(@scheduler.slots['first-view']).to.have.length 0
+  describe 'submitView', ->
+    it 'should throw if duration is not numeric', ->
+      @scheduler.register 'view'
+      fn = =>
+        @scheduler.submitView 'view', '<html>', 'invalid-duration', {}
 
-      fview = (done) ->
-      @scheduler.submit 'first-view', fview
-      expect(@scheduler.slots['first-view']).to.have.length 1
-      expect(@scheduler.slots['first-view']).to.deep.equal [fview]
+      expect(fn).to.throw RangeError
 
-      @scheduler.register('second-view')
-      expect(@scheduler.slots['first-view']).to.have.length 1
-      expect(@scheduler.slots['second-view']).to.have.length 0
+    it 'should throw if duration is not in the range', ->
+      @scheduler.register 'view'
+      fn = =>
+        @scheduler.submitView 'view', '<html>', -1, {}
+      expect(fn).to.throw RangeError
 
-      sview = (done) ->
-      @scheduler.submit 'second-view', sview
-      expect(@scheduler.slots['second-view']).to.deep.equal [sview]
-      expect(@scheduler.slots['first-view']).to.deep.equal [fview]
+      fn = =>
+        @scheduler.submitView 'view', '<html>', 0, {}
+      expect(fn).to.throw RangeError
 
-      fview2 = (done) ->
-      @scheduler.submit 'first-view', fview2
-      expect(@scheduler.slots['second-view']).to.deep.equal [sview]
-      expect(@scheduler.slots['first-view']).to.deep.equal [fview, fview2]
+      fn = =>
+        # max is currently set to 60 seconds.
+        @scheduler.submitView 'view', '<html>', 70000, {}
+      expect(fn).to.throw RangeError
 
-    it 'should add the view to the fallback slot', ->
+    it "should throw if slot doesn't exists", ->
+      fn = =>
+        @scheduler.submitView 'view', '<html>', 1000, {}
+
+      expect(fn).to.throw Error
+
+      @scheduler.register 'view'
+      expect(fn).to.not.throw
+
+    it 'should submit the view', ->
+      @scheduler.register 'view'
+      begin = ->
+      end = ->
+      error = ->
+
+      submit = sinon.spy @scheduler, '_submit'
+
+      @scheduler.submitView 'view', '<html>', 5000, {
+        begin: begin
+        end: end
+        error: error
+      }
+
+      expect(submit).to.have.been.calledOnce
+      expect(submit).to.have.been.calledWith
+        slot: 'view'
+        view: '<html>'
+        duration: 5000
+        isVideo: false
+        callbacks:
+          begin: begin
+          end: end
+          error: error
+
+  describe 'submitVideo', ->
+    it 'should submit the view', ->
+      @scheduler.register 'view'
+      begin = ->
+      end = ->
+      error = ->
+
+      submit = sinon.spy @scheduler, '_submit'
+
+      @scheduler.submitVideo 'view', 'video-file', {
+        begin: begin
+        end: end
+        error: error
+      }
+
+      expect(submit).to.have.been.calledOnce
+      expect(submit).to.have.been.calledWith
+        slot: 'view'
+        file: 'video-file'
+        isVideo: true
+        callbacks:
+          begin: begin
+          end: end
+          error: error
+
+  describe '_submit', ->
+    it 'should add the view to its slot', ->
+      view =
+        slot: 'view'
+        extra: 'data'
+
+      @scheduler.register 'view'
+      @scheduler.register 'another'
+
+      @scheduler._submit view
+      expect(@scheduler._slots['view']).to.deep.equal [{slot: 'view', extra: 'data'}]
+      expect(@scheduler._slots['another']).to.deep.equal []
+
+      view =
+        slot: 'another'
+        key: 'value'
+
+      @scheduler._submit view
+      expect(@scheduler._slots['view']).to.deep.equal [{slot: 'view', extra: 'data'}]
+      expect(@scheduler._slots['another']).to.deep.equal [{slot: 'another', key: 'value'}]
+
+      view =
+        slot: 'view'
+        extra: 'more data'
+
+      @scheduler._submit view
+      expect(@scheduler._slots['view']).to.deep.equal [
+        {slot: 'view', extra: 'data'}
+        {slot: 'view', extra: 'more data'}]
+      expect(@scheduler._slots['another']).to.deep.equal [{slot: 'another', key: 'value'}]
+
+    it 'should add the view to fallback slot', ->
+      view =
+        slot: 'fallback'
+        extra: 'data'
+
+      @scheduler.register 'view', 'fallback'
+      @scheduler._submit view
+      expect(@scheduler._slots['view']).to.deep.equal []
+      expect(@scheduler._fallbackSlots['fallback']).to.deep.equal [{slot: 'fallback', extra: 'data'}]
+
+    it 'should prefer primary slots over fallback slots', ->
+      view =
+        slot: 'primary'
+        extra: 'data'
+
       @scheduler.register 'primary', 'fallback'
-      expect(@scheduler.slots['primary']).to.have.length 0
-      expect(@scheduler.fallbackSlots['fallback']).to.have.length 0
+      @scheduler.register 'another', 'primary'
 
-      fview = (done) ->
-      @scheduler.submit 'fallback', fview
-      expect(@scheduler.slots['primary']).to.have.length 0
-      expect(@scheduler.fallbackSlots['fallback']).to.have.length 1
+      @scheduler._submit view
+      expect(@scheduler._slots['primary']).to.deep.equal [{slot: 'primary', extra: 'data'}]
+      expect(@scheduler._fallbackSlots['primary']).to.deep.equal []
 
-  describe 'run', ->
-    describe 'tryToViewCurrent', ->
-      it 'should return false if view order is empty', ->
-        expect(@scheduler._tryToViewCurrent(->)).to.be.false
+    it 'should throw if slot is unknown', ->
+      view =
+        slot: 'view'
 
-      it 'should return try the first slot if current is too large', ->
-        @scheduler.register('view')
-        @scheduler.submit 'view', ->
+      fn = =>
+        @scheduler._submit view
 
-        expect(@scheduler.current).to.equal 0
+      expect(fn).to.throw Error
 
-        @scheduler.current = 10
-        @scheduler._tryToViewCurrent(->)
-        # it first resets current to 0, then increments it.
-        expect(@scheduler.current).to.equal 1
+  describe '_run', ->
+    it 'should show the default view if there are no views', ->
+      showDefaultView = sinon.stub @scheduler, '_showDefaultView', ->
+      @scheduler._run()
+      expect(showDefaultView).to.have.been.calledOnce
 
-      it 'should return false if there are no views to display', ->
-        @scheduler.register('view')
-        expect(@scheduler._tryToViewCurrent(->)).to.be.false
+  describe '_tryToViewCurrent', ->
+    it 'should return when viewOrder is empty', ->
+      done = sinon.stub()
+      render = sinon.spy @scheduler, '_render'
+      res = @scheduler._tryToViewCurrent done
+      expect(res).to.be.false
+      expect(render).to.not.have.been.called
+      expect(done).to.not.have.been.called
 
-      it 'should increment current even if there are no views to display', ->
-        @scheduler.register('view')
-        expect(@scheduler.current).to.equal 0
-        expect(@scheduler._tryToViewCurrent(->)).to.be.false
-        expect(@scheduler.current).to.equal 1
+    it 'should return when there are no views', ->
+      @scheduler.register 'view'
+      @scheduler.register 'another'
+      expect(@scheduler._current).to.be.equal 0
+      done = sinon.stub()
+      render = sinon.spy @scheduler, '_render'
 
-      it 'should call a view and remove it from the slot', (done) ->
-        @scheduler.register('view')
+      res = @scheduler._tryToViewCurrent done
+      expect(res).to.be.false
+      expect(done).to.not.have.been.called
+      expect(render).to.not.have.been.called
+      expect(@scheduler._current).to.be.equal 1
 
-        @scheduler.submit 'view', (cb) =>
-          expect(@scheduler.current).to.equal 1
-          expect(@scheduler.slots['view']).to.have.length 0
-          cb()
+      res = @scheduler._tryToViewCurrent done
+      expect(res).to.be.false
+      expect(done).to.not.have.been.called
+      expect(render).to.not.have.been.called
+      expect(@scheduler._current).to.be.equal 2
 
-        expect(@scheduler.slots['view']).to.have.length 1
+      res = @scheduler._tryToViewCurrent done
+      expect(res).to.be.false
+      expect(done).to.not.have.been.called
+      expect(render).to.not.have.been.called
+      expect(@scheduler._current).to.be.equal 1
 
-        res = @scheduler._tryToViewCurrent done
-        expect(res).to.be.true
+    it 'should consume a view', ->
+      @scheduler.register 'view'
+      @scheduler.register 'another'
+      done = sinon.stub()
+      render = sinon.stub @scheduler, '_render', (v, d) ->
 
-    it 'should run default view if there are no registered views', (done) ->
-      defaultView = (cb) =>
+      @scheduler.submitView 'view', '<html>', 1000, {}
+      @scheduler.submitView 'view', '<other html>', 1000, {}
+
+      expect(@scheduler._slots.view).to.have.length 2
+      expect(@scheduler._current).to.be.equal 0
+
+      res = @scheduler._tryToViewCurrent done
+      expect(res).to.be.true
+      expect(@scheduler._current).to.be.equal 1
+      expect(render).to.have.been.calledOnce
+      expect(render.args[0][1]).to.equal done
+      expect(render.args[0][0]).to.deep.equal
+        slot: 'view'
+        view: '<html>'
+        duration: 1000
+        isVideo: false
+        callbacks: {}
+      expect(@scheduler._slots.view).to.have.length 1
+
+      # this will try to view 'another'
+      res = @scheduler._tryToViewCurrent done
+      expect(res).to.be.false
+      expect(render).to.have.been.calledOnce
+      expect(@scheduler._current).to.be.equal 2
+      expect(@scheduler._slots.view).to.have.length 1
+
+      res = @scheduler._tryToViewCurrent done
+      expect(res).to.be.true
+      expect(@scheduler._current).to.be.equal 1
+      expect(render).to.have.been.calledTwice
+      expect(render.args[1][1]).to.equal done
+      expect(render.args[1][0]).to.deep.equal
+        slot: 'view'
+        view: '<other html>'
+        duration: 1000
+        isVideo: false
+        callbacks: {}
+      expect(@scheduler._slots.view).to.have.length 0
+
+  describe '_viewFallbackElseDefaultView', ->
+    it 'should show the default view if there are no fallback slots', ->
+      defaultView = sinon.stub @scheduler, '_showDefaultView', ->
+      render = sinon.stub @scheduler, '_render', (v, d) ->
+      @scheduler._viewFallbackElseDefaultView ->
+      expect(render).to.not.have.been.called
+      expect(defaultView).to.have.been.calledOnce
+
+    it 'should show the default view if there are no fallback views', ->
+      @scheduler.register 'view', 'fallback'
+      defaultView = sinon.stub @scheduler, '_showDefaultView', ->
+      render = sinon.stub @scheduler, '_render', (v, d) ->
+      @scheduler._viewFallbackElseDefaultView ->
+      expect(render).to.not.have.been.called
+      expect(defaultView).to.have.been.calledOnce
+
+    it 'should consume a fallback view', ->
+      @scheduler.register 'view', 'fallback'
+      @scheduler.submitView 'fallback', '<html>', 1000, {}
+      defaultView = sinon.stub @scheduler, '_showDefaultView', ->
+      render = sinon.stub @scheduler, '_render', (v, d) ->
+      done = ->
+      expect(@scheduler._fallbackSlots['fallback']).to.have.length 1
+      @scheduler._viewFallbackElseDefaultView done
+      expect(render).to.have.been.calledOnce
+      expect(defaultView).to.not.have.been.called
+      expect(render.args[0][1]).to.equal done
+      expect(render.args[0][0]).to.deep.equal
+        slot: 'fallback'
+        view: '<html>'
+        duration: 1000
+        isVideo: false
+        callbacks: {}
+      expect(@scheduler._fallbackSlots['fallback']).to.have.length 0
+
+  describe '_showDefaultView', ->
+    it 'should consume a default view', ->
+      @scheduler.submitDefaultView '<html>', 1000, {}
+      render = sinon.stub @scheduler, '_render', (v, d) ->
+      expect(@scheduler._slots[DEFAULT_VIEW]).to.have.length 1
+      done = ->
+      @scheduler._showDefaultView done
+      expect(render).to.have.been.calledOnce
+      expect(render).to.have.been.calledWith
+        slot: DEFAULT_VIEW
+        view: '<html>'
+        duration: 1000
+        isVideo: false
+        callbacks: {}
+      expect(@scheduler._slots[DEFAULT_VIEW]).to.have.length 0
+
+    it 'should render the black screen if there are no default views available', ->
+      render = sinon.stub @scheduler, '_render', (v, d) ->
+      done = ->
+      @scheduler._showDefaultView done
+      expect(render).to.have.been.calledOnce
+      view = render.args[0][0]
+      expect(view.slot).to.be.equal BLACK_SCREEN
+
+  describe '_render', ->
+    beforeEach ->
+      @clock = sinon.useFakeTimers()
+
+    afterEach ->
+      @clock.restore()
+
+    it 'should call the begin callback', ->
+      begin = sinon.stub()
+      view =
+        slot: 'view'
+        view: '<html>'
+        isVideo: false
+        duration: 1000
+        callbacks:
+          begin: begin
+
+      @scheduler._render view, ->
+      expect(begin).to.have.been.calledOnce
+
+    it 'should call the error callback on error', ->
+      begin = sinon.stub()
+      error = sinon.stub()
+      end = sinon.stub()
+
+      get = sinon.stub @scheduler, '_cleanAndGetContainer', ->
+        throw new Error('error')
+
+      view =
+        slot: 'view'
+        view: '<html>'
+        isVideo: false
+        duration: 1000
+        callbacks:
+          begin: begin
+          end: end
+          error: error
+
+      done = sinon.stub()
+      @scheduler._render view, done
+      expect(get).to.have.been.calledOnce
+      expect(begin).to.have.been.calledOnce
+      expect(error).to.have.been.calledOnce
+      expect(done).to.have.been.calledOnce
+      expect(done).to.have.been.calledWith 'view'
+      expect(end).to.not.have.been.called
+
+    it 'should render html', (done) ->
+      begin = sinon.stub()
+      error = sinon.stub()
+      end = sinon.stub()
+      div = {}
+      @scheduler.document =
+        body:
+          appendChild: ->
+      fadeIn = sinon.stub @scheduler, '_fadeIn', ->
+      video = sinon.stub @scheduler, '_renderVideoView', ->
+      html = sinon.stub @scheduler, '_renderHtmlView', ->
+      onViewEnd = sinon.stub @scheduler, '_onViewEnd', ->
+
+      get = sinon.stub @scheduler, '_cleanAndGetContainer', (cb) =>
+        cb div
+
+        expect(get).to.have.been.calledOnce
+        expect(begin).to.have.been.calledOnce
+        expect(error).to.not.have.been.called
+        expect(video).to.not.have.been.called
+        expect(html).to.have.been.calledOnce
+        expect(end).to.not.have.been.called
+        expect(onViewEnd).to.not.have.been.called
+        expect(renderDone).to.not.have.been.called
+        expect(fadeIn).to.have.been.calledOnce
+
+        @clock.tick 1000
+        expect(onViewEnd).to.have.been.calledOnce
+        expect(renderDone).to.have.been.calledOnce
+        expect(renderDone).to.have.been.calledWith 'view'
+
         done()
 
-      scheduler = new Scheduler defaultView
-      scheduler._run()
+      view =
+        slot: 'view'
+        view: '<html>'
+        isVideo: false
+        duration: 1000
+        callbacks:
+          begin: begin
+          end: end
+          error: error
 
-    it 'should run a fallback view if there are no available views', ->
-      defaultView = sinon.spy()
-      fallbackView = sinon.spy()
+      renderDone = sinon.stub()
+      @scheduler._render view, renderDone
 
-      scheduler = new Scheduler defaultView
-      scheduler.register 'first', 'fallback'
-      scheduler.register 'second'
-      scheduler.submit 'fallback', fallbackView
-      scheduler._run()
+    it 'should render video', (done) ->
+      begin = sinon.stub()
+      error = sinon.stub()
+      end = sinon.stub()
+      div = {}
+      @scheduler.document =
+        body:
+          appendChild: ->
+      fadeIn = sinon.stub @scheduler, '_fadeIn', ->
+      video = sinon.stub @scheduler, '_renderVideoView', ->
+      html = sinon.stub @scheduler, '_renderHtmlView', ->
+      onViewEnd = sinon.stub @scheduler, '_onViewEnd', ->
 
-      expect(defaultView).to.not.have.been.called
-      expect(fallbackView).to.have.been.called
+      get = sinon.stub @scheduler, '_cleanAndGetContainer', (cb) =>
+        cb div
 
-    it 'should run default view if there are no available views', (done) ->
-      defaultView = (cb) =>
+        expect(get).to.have.been.calledOnce
+        expect(begin).to.have.been.calledOnce
+        expect(error).to.not.have.been.called
+        expect(video).to.have.been.calledOnce
+        expect(html).to.not.have.been.called
+        expect(end).to.not.have.been.called
+        expect(onViewEnd).to.not.have.been.called
+        expect(renderDone).to.not.have.been.called
+        expect(fadeIn).to.have.been.calledOnce
+
+        @clock.tick 1000
+        expect(onViewEnd).to.not.have.been.called
+        expect(renderDone).to.not.have.been.called
+
         done()
 
-      scheduler = new Scheduler defaultView
-      scheduler.register 'first'
-      scheduler.register 'second'
-      scheduler._run()
+      view =
+        slot: 'view'
+        file: 'video-file'
+        isVideo: true
+        duration: 1000
+        callbacks:
+          begin: begin
+          end: end
+          error: error
 
-    it 'should call views', ->
-      defaultView = sinon.spy()
-
-      scheduler = new Scheduler defaultView
-      scheduler.register 'first'
-      scheduler.register 'second'
-      scheduler.register 'third'
-
-      first = sinon.spy()
-      second = sinon.spy()
-      third = sinon.spy()
-
-      scheduler.submit 'first', first
-      scheduler.submit 'second', second
-      scheduler.submit 'third', third
-
-      scheduler._run()
-
-      expect(defaultView).to.not.have.been.called
-      expect(first).to.have.been.calledOnce
-      expect(second).to.not.have.been.called
-      expect(third).to.not.have.been.called
-
-      expect(scheduler.slots['first']).to.have.length 0
-      expect(scheduler.slots['second']).to.have.length 1
-      expect(scheduler.slots['third']).to.have.length 1
-
-      scheduler._run()
-
-      expect(defaultView).to.not.have.been.called
-      expect(first).to.have.been.calledOnce
-      expect(second).to.have.been.calledOnce
-      expect(third).to.not.have.been.called
-
-      expect(scheduler.slots['first']).to.have.length 0
-      expect(scheduler.slots['second']).to.have.length 0
-      expect(scheduler.slots['third']).to.have.length 1
-
-      scheduler._run()
-
-      expect(defaultView).to.not.have.been.called
-      expect(first).to.have.been.calledOnce
-      expect(second).to.have.been.calledOnce
-      expect(third).to.have.been.calledOnce
-
-      expect(scheduler.slots['first']).to.have.length 0
-      expect(scheduler.slots['second']).to.have.length 0
-      expect(scheduler.slots['third']).to.have.length 0
-
-      scheduler._run()
-
-      expect(defaultView).to.have.been.calledOnce
-      expect(first).to.have.been.calledOnce
-      expect(second).to.have.been.calledOnce
-      expect(third).to.have.been.calledOnce
-
-      expect(scheduler.slots['first']).to.have.length 0
-      expect(scheduler.slots['second']).to.have.length 0
-      expect(scheduler.slots['third']).to.have.length 0
-
-      scheduler.submit 'first', first
-      scheduler._run()
-
-      expect(defaultView).to.have.been.calledOnce
-      expect(first).to.have.been.calledTwice
-      expect(second).to.have.been.calledOnce
-      expect(third).to.have.been.calledOnce
-
-      expect(scheduler.slots['first']).to.have.length 0
-      expect(scheduler.slots['second']).to.have.length 0
-      expect(scheduler.slots['third']).to.have.length 0
+      renderDone = sinon.stub()
+      @scheduler._render view, renderDone
