@@ -1,6 +1,5 @@
 TAG                     = 'scheduler:'
 
-MAX_VIEW_DURATION       = 60 * 1000
 CONTENT_DIV_ID          = '__cortex_main'
 DEFAULT_VIEW            = '__dv'
 BLACK_SCREEN_SLOT_NAME  = '__bs'
@@ -14,9 +13,22 @@ BLACK_SCREEN =
       console.log "#{TAG} Even black screens fail... err=#{err?.message}"
 
 class Scheduler
-  constructor: (@onVideoView, @onViewEnd) ->
-    @_slots =
-      "#{DEFAULT_VIEW}": []
+  constructor: (opts, @onVideoView, @onViewEnd) ->
+    opts ?= {}
+
+    @_maxViewDuration = 60 * 1000
+    if opts.maxViewDuration?
+      @_maxViewDuration = opts.maxViewDuration
+
+    @_defaultViewQueueLen = 10
+    if opts.defaultViewQueueLen?
+      @_defaultViewQueueLen = opts.defaultViewQueueLen
+
+    @_defaultView = undefined
+    @_defaultViewQueue = []
+    @_defaultViewRenderIndex = 0
+
+    @_slots = {}
     @_viewOrder = []
     @_fallbackSlots = {}
     @_fallbackViewOrder = []
@@ -34,17 +46,27 @@ class Scheduler
         @_fallbackSlots[fallback] = []
         @_fallbackViewOrder.push fallback
 
-  submitDefaultView: (view, duration, callbacks) ->
-    @submitView DEFAULT_VIEW, view, duration, callbacks
+  setDefaultView: (sname) ->
+    console.log "#{TAG} Setting default view to #{sname}"
+    if sname of @_slots or sname of @_fallbackSlots
+      @_defaultView = sname
+    else
+      throw new Error("Unknown view slot: #{sname}")
+
+  _submitDefaultView: (view) ->
+    if @_defaultViewQueue.length >= @_defaultViewQueueLen
+      @_defaultViewQueue.shift()
+
+    @_defaultViewQueue.push view
 
   submitView: (sname, view, duration, callbacks) ->
     console.log "#{TAG} New view to be submitted to slot #{sname} with duration #{duration}"
     if not @_isNumeric(duration)
-      throw new RangeError("View duration should be in the range of (0, #{MAX_VIEW_DURATION})")
+      throw new RangeError("View duration should be in the range of (0, #{@_maxViewDuration})")
 
     duration = Number(duration)
-    if duration <= 0 or duration > MAX_VIEW_DURATION
-      throw new RangeError("View duration should be in the range of (0, #{MAX_VIEW_DURATION})")
+    if duration <= 0 or duration > @_maxViewDuration
+      throw new RangeError("View duration should be in the range of (0, #{@_maxViewDuration})")
 
     @_submit
       slot:       sname
@@ -61,6 +83,11 @@ class Scheduler
       isVideo:    true
 
   _submit: (view) ->
+    if view.slot is @_defaultView
+      nview = @_cloneView view
+      nview.slot = DEFAULT_VIEW
+      @_submitDefaultView nview
+
     if view.slot of @_slots
       @_slots[view.slot].push view
     else if view.slot of @_fallbackSlots
@@ -69,6 +96,12 @@ class Scheduler
       throw new Error("Unknown view slot: #{view.slot}")
 
   start: (window, document) ->
+    if not @_defaultView?
+      console.warn """No default view is set. Consider selecting one of the \
+        view slots as default by calling setDefaultView(slotName). Views from \
+        the default slot will get played automatically when everything else \
+        fail."""
+
     @window = window
     @document = document
     @_run()
@@ -81,21 +114,21 @@ class Scheduler
       @_run()
 
     if @_viewOrder.length == 0
-      @_showDefaultView done
+      @_renderDefaultView done
 
     else
       checked = 0
       loop
-        if @_tryToViewCurrent done
+        if @_tryToRenderCurrent done
           break
 
         else
           checked++
           if checked >= @_viewOrder.length
-            @_viewFallbackElseDefaultView done
+            @_renderFallbackElseDefaultView done
             break
 
-  _tryToViewCurrent: (done) ->
+  _tryToRenderCurrent: (done) ->
     if @_viewOrder.length == 0
       return false
 
@@ -114,7 +147,7 @@ class Scheduler
 
     false
 
-  _viewFallbackElseDefaultView: (done) ->
+  _renderFallbackElseDefaultView: (done) ->
     if @_fallbackViewOrder.length > 0
       for sname in @_fallbackViewOrder
         slot = @_fallbackSlots[sname]
@@ -124,17 +157,20 @@ class Scheduler
           @_render fallback, done
           return
 
-    @_showDefaultView done
+    @_renderDefaultView done
 
-  _showDefaultView: (done) ->
-    slot = @_slots[DEFAULT_VIEW]
-    if slot.length > 0
-      view = slot.shift()
-      console.log "#{TAG} Rendering the default view for #{view.duration} msecs."
+  _renderDefaultView: (done) ->
+    if @_defaultViewQueue.length > 0
+      if @_defaultViewRenderIndex >= @_defaultViewQueue.length
+        @_defaultViewRenderIndex = 0
+
+      view = @_defaultViewQueue[@_defaultViewRenderIndex]
+      @_defaultViewRenderIndex += 1
+      console.warn "#{TAG} Rendering the default view for #{view.duration} msecs."
       @_render view, done
 
     else
-      console.log "#{TAG} BLACK SCREEN!!!!!!! for #{BLACK_SCREEN.duration} msecs."
+      console.warn "#{TAG} BLACK SCREEN!!!!!!! for #{BLACK_SCREEN.duration} msecs."
       @_render BLACK_SCREEN, done
 
   _render: (view, done) ->
@@ -228,6 +264,20 @@ class Scheduler
         @window.requestAnimationFrame increase
 
     increase()
+
+  _cloneView: (view) ->
+    nview =
+      slot:       view.slot
+      callbacks:  view.callbacks
+      isVideo:    view.isVideo
+
+    if view.isVideo
+      nview.file = view.file
+    else
+      nview.view = view.view
+      nview.duration = view.duration
+
+    nview
 
   _onViewEnd: (sname) ->
     @onViewEnd? sname
