@@ -97,10 +97,10 @@ class Scheduler
 
   start: (window, document) ->
     if not @_defaultView?
-      console.warn """No default view is set. Consider selecting one of the \
-        view slots as default by calling setDefaultView(slotName). Views from \
-        the default slot will get played automatically when everything else \
-        fail."""
+      console.warn """Scheduler: No default view is set. Consider selecting
+        one of the view slots as default by calling setDefaultView(slotName). \
+        Views from the default slot will get played automatically when \
+        everything else fail."""
 
     @window = window
     @document = document
