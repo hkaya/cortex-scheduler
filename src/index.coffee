@@ -34,6 +34,11 @@ class Scheduler
     @_fallbackViewOrder = []
     @_current = 0
 
+    @_exit = false
+
+  exit: ->
+    @_exit = true
+
   register: (sname, fallback) ->
     console.log "#{TAG} Registering new slot: #{sname} with fallback: #{fallback}"
     if not @_slots[sname]?
@@ -107,6 +112,10 @@ class Scheduler
     @_run()
 
   _run: ->
+    if @_exit
+      console.log "Scheduler will exit."
+      return
+
     st = new Date().getTime()
     done = (sname) =>
       et = new Date().getTime() - st
@@ -242,12 +251,12 @@ class Scheduler
     decrease = =>
       opacity -= 0.15
       if opacity <= 0
-        element.style.opacity = 0
-        element.style.display = 'none'
+        element?.style.opacity = 0
+        element?.style.display = 'none'
         cb?()
       else
-        element.style.opacity = opacity
-        @window.requestAnimationFrame decrease
+        element?.style.opacity = opacity
+        @window?.requestAnimationFrame decrease
 
     decrease()
 
@@ -257,11 +266,11 @@ class Scheduler
     increase = =>
       opacity += 0.15
       if opacity >= 1
-        element.style.opacity = 1
+        element?.style.opacity = 1
         cb?()
       else
-        element.style.opacity = opacity
-        @window.requestAnimationFrame increase
+        element?.style.opacity = opacity
+        @window?.requestAnimationFrame increase
 
     increase()
 
