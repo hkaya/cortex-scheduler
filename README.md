@@ -2,88 +2,86 @@
 
 Scheduler is a simple library for Cortex apps to view a set of pages in order.
 
+> Prior to Cortex Player v1.6, apps were required to ship with cortex-scheduler. With v1.6, cortex-scheduler is part of the Cortex api. Instead of using the scheduler directly, you should use window.Cortex.view API.
+
+A `slot` is a bucket of similar views. Usually, Cortex apps will consist of multiple pages and each page is expected to register a `slot` to submit view requests.
+
+A `view` is a single instance of a display request. A `view` can either be a video play request or HTML request. When the time comes, the scheduler will consume a `view` from a `slot` by either playing the video or rendering the HTML.
+
+## View Priorities
+There are three priority levels that apps can submit view requests to.
+
+- `Normal (L1)`: This is the common level where apps should submit regular view requests.
+- `Fallback (L2)`: Views in this level will only get displayed when no L1 view is available.
+- `Default (L3)`: When both L1 and L2 fails, scheduler will display views in L3. When marked as default, cortex-scheduler will track submissions to a slot and automatically play them as L3 views.
+
+## View Order
+You may define the view order of the slots by registering slots in the order you want. Take the following example:
+
+```coffeescript
+scheduler.register 'ads'
+scheduler.register 'editorial'
+scheduler.register 'ads'
+scheduler.register 'ads'
+```
+
+With this registration order, the scheduler will try to show an ad view, then an editorial view followed by two ad views. If at any time a slot doesn't have any views, scheduler will move on to the next slot in the given view order.
+
 ## Usage
 
-- Initialize the scheduler:
+### Registering slots
+- `register(slotName, fallbackSlotName)`: This will create a slot named `slotName`. If provided, it will also create a fallback slot named `fallbackSlotName` and show views from `fallbackSlotName` when there are no views to display.
+- Multiple calls to `register()` with the same slot name is valid. It will modify the view order.
+
+### Setting a default view
+- `setDefaultView(slotName)`: Scheduler will track submissions to the slot `slotName` and use them when everything else fails. `slotName` must be already registered. It is not mandatory to set a default view but it is a good practice to prevent black screens.
+
+### Submitting views
+- `submitView(slotName, html, duration, callbacks)`: Submit an HTML view to `slotName`. All resources (images, etc.) being used in html should already be cached.
+- `submitVideo(slotName, videoFile, callbacks)`: Submit a video to `slotName`. Video file should already be cached.
+- `submit` methods accept an optional `callbacks` object. `callbacks` can have `begin`, `end` and `error` properties. Scheduler will call the `callbacks.begin()` right before it starts to process the view and call the `callbacks.end()` when the view finishes. At anytime, when an error occurs, it will call the `callbacks.error()` function.
+
+### Configuration options
+- `defaultViewQueueLen`: Number of views to track for the default view.
+- `maxViewDuration`: Max view duration in milliseconds. Views with longer duration will get rejected.
+
+## Sample usage
+Following is a sample usage based on Cortex.view API.
+
 ```coffeescript
-container = $('#container')
-scheduler = new Scheduler (done) ->
-  # The default view. This view will get rendered if the scheduler
-  # fails to render all other views. 
-  container.html 'default view'
-  done()
-```
+CortexView = window?.Cortex.view
+EditorialView = require '...'
 
-- Register views:
-```coffeescript
-scheduler.register 'main'
-scheduler.register 'ads'
-```
-Scheduler keeps buckets of view requests. Each register request will create a new bucket that the caller can submit rendering requests to.
-
-Once a view is registered, the scheduler will accept rendering requests for that view and fullfill them whenever possible.
-
-Registration has two purposes:
-  1. Makes the scheduler ready for rendering requests.
-  2. Define the order of render requests.
-
-There is no extra paramaters to make #2 work. Simply call the register() with the same parameter to define the rendering order:
-```coffeescript
-scheduler.register 'main'
-scheduler.register 'ads'
-scheduler.register 'video'
-scheduler.register 'ads'
-```
-The above code block will make the scheduler loop over the views in the following order: 'main', 'ads', 'video', 'ads' and start over with 'main'.
-
-- Submit render tasks:
-Once a view is registered, caller can submit view requests to the scheduler as:
-```coffeescript
-scheduler.submit 'main', (done) =>
-  # render content
-  done()
-```
-
-Once submitted, a task will wait to get executed by the scheduler. Scheduler will go over the tasks in the order defined by the caller (through register calls). Tasks will get deleted when they are executed. It is up to the caller to resubmit the task.
-
-##Important Note On Tasks
-- It is important that the tasks only perform rendering and no I/O. Once submitted, the task should be able to render properly without any further I/O operation.
-- Tasks should explicitly call the callback passed to them to notify the scheduler that the tasks is finished. The callback needs to be called even when there is an error.
-
-## Common Task Structure
-```coffeescript
-class View
-  constructor: (@scheduler) ->
-  
-  render: (container) ->
-    # perform I/O and any other time consuming tasks.
-    # when everything needed is ready:
-    @scheduler.submit 'queue', (done) =>
-      # actually render html
-      container.html 'some content'
-      callback = =>
-        # resubmit the task.
-        @render()
-        # notify the scheduler that current task is done.
-        done()
-      # show current screen for 5 seconds.
-      setTimeout callback, 5000
+class AdView
+  run: ->
+    onerror = (err) =>
+      run = => @run()
+      # Delay the next run a bit to prevent looping too fast in case of temporary problems. 
+      setTimeout run, 1000
+    callbacks =
+      error: onerror
+      begin: =>
+        # this will make sure we prepare another ad while the current one is being displayed.
+        @run()
+      end: -> console.log "AdView finished rendering an ad."
       
-scheduler = new Scheduler (done) ->
-  container.html 'default view...'
-  # most of the time rendering the default view means that something went wrong with other views.
-  # sleep for a short time to let them recover.
-  setTimeout done, 1000
+    ad = getSomeAd()
+    cacheAd(ad).then =>
+      if isVideo(ad)
+        CortexView.submitVideo 'AdView', cachedVideoFile, callbacks
+      else
+        CortexView.submitView 'AdView', @render(ad), adDuration, callbacks
+        
+    .catch onerror
+      
+adView = new AdView()
+editorialView = new EditorialView()
 
-view = new View(scheduler)
-scheduler.register 'queue' # this should match the name we're using in View.render()
-container = $('#container') # assuming that the View will render something to DOM.
-view.render(container) # submit the first task.
+CortexView.register 'AdView', 'EditorialView'
+CortexView.setDefaultView 'AdView'
 
-# finally, start the scheduler to execute the tasks:
-scheduler.start()
-# at this point, View.render() will get rendered indefinitely.
+adView.run()
+editorialView.run()
+
+CortexView.start()
 ```
-
-See https://github.com/hkaya/cortex-transit for a more comprehensive implementation.
-
