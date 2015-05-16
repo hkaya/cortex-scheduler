@@ -228,6 +228,7 @@ class Scheduler
     if div?
       @_fadeOut div, =>
         @document.body.removeChild div
+        div = null
         cb @_newDiv()
 
     else
