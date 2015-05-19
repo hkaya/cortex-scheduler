@@ -226,7 +226,6 @@ describe 'Scheduler', ->
         slot: DEFAULT_VIEW
         view: '<html>'
         duration: 1000
-        callbacks: {}
         isVideo: false
 
   describe '_run', ->
@@ -409,7 +408,6 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
-        callbacks: {}
       expect(@scheduler._defaultViewQueue).to.have.length 1
       expect(@scheduler._defaultViewRenderIndex).to.be.equal 1
 

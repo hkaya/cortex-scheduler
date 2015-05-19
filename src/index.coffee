@@ -89,9 +89,7 @@ class Scheduler
 
   _submit: (view) ->
     if view.slot is @_defaultView
-      nview = @_cloneView view
-      nview.slot = DEFAULT_VIEW
-      @_submitDefaultView nview
+      @_submitDefaultView @_newDefaultView(view)
 
     if view.slot of @_slots
       @_slots[view.slot].push view
@@ -120,7 +118,7 @@ class Scheduler
     done = (sname) =>
       et = new Date().getTime() - st
       console.log "#{TAG} #{sname} completed in #{et} msecs."
-      @_run()
+      process.nextTick => @_run()
 
     if @_viewOrder.length == 0
       @_renderDefaultView done
@@ -275,15 +273,16 @@ class Scheduler
 
     increase()
 
-  _cloneView: (view) ->
+  _newDefaultView: (view) ->
     nview =
-      slot:       view.slot
-      callbacks:  view.callbacks
-      isVideo:    view.isVideo
+      slot: DEFAULT_VIEW
 
     if view.isVideo
+      nview.isVideo = true
       nview.file = view.file
+
     else
+      nview.isVideo = false
       nview.view = view.view
       nview.duration = view.duration
 
