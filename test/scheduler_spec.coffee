@@ -228,6 +228,26 @@ describe 'Scheduler', ->
         duration: 1000
         isVideo: false
 
+  describe 'start', ->
+    it 'should set the root node', ->
+      run = sinon.stub @scheduler, '_run', ->
+      win =
+        k: 'v'
+      doc =
+        body: 'test'
+
+      @scheduler.start win, doc
+      expect(@scheduler.root).to.equal 'test'
+
+      @scheduler.start win, doc, null
+      expect(@scheduler.root).to.equal 'test'
+
+      @scheduler.start win, doc, undefined
+      expect(@scheduler.root).to.equal 'test'
+
+      @scheduler.start win, doc, 'root'
+      expect(@scheduler.root).to.equal 'root'
+
   describe '_run', ->
     it 'should show the default view if there are no views', ->
       renderDefaultView = sinon.stub @scheduler, '_renderDefaultView', ->
@@ -474,6 +494,7 @@ describe 'Scheduler', ->
       @scheduler.document =
         body:
           appendChild: ->
+      @scheduler.root = @scheduler.document.body
       fadeIn = sinon.stub @scheduler, '_fadeIn', ->
       video = sinon.stub @scheduler, '_renderVideoView', ->
       html = sinon.stub @scheduler, '_renderHtmlView', ->
@@ -520,6 +541,7 @@ describe 'Scheduler', ->
       @scheduler.document =
         body:
           appendChild: ->
+      @scheduler.root = @scheduler.document.body
       fadeIn = sinon.stub @scheduler, '_fadeIn', ->
       video = sinon.stub @scheduler, '_renderVideoView', ->
       html = sinon.stub @scheduler, '_renderHtmlView', ->

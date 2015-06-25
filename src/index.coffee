@@ -98,7 +98,7 @@ class Scheduler
     else
       throw new Error("Unknown view slot: #{view.slot}")
 
-  start: (window, document) ->
+  start: (window, document, root) ->
     if not @_defaultView?
       console.warn """Scheduler: No default view is set. Consider selecting
         one of the view slots as default by calling setDefaultView(slotName). \
@@ -107,6 +107,7 @@ class Scheduler
 
     @window = window
     @document = document
+    @root = root || document.body
     @_run()
 
   _run: ->
@@ -199,7 +200,7 @@ class Scheduler
 
           setTimeout end, view.duration
 
-        @document.body.appendChild div
+        @root.appendChild div
         @_fadeIn div, ->
     catch err
       console.log "#{TAG} Error while rendering #{view.slot} view. video=#{view.isVideo}, e=#{err?.message}"
@@ -225,7 +226,7 @@ class Scheduler
     div = @document.getElementById(CONTENT_DIV_ID)
     if div?
       @_fadeOut div, =>
-        @document.body.removeChild div
+        @root.removeChild div
         div = null
         cb @_newDiv()
 
