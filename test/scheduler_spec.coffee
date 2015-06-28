@@ -129,12 +129,20 @@ describe 'Scheduler', ->
         begin: begin
         end: end
         error: error
+      }, {
+        audio:
+          enable: true
+          volume: 0.7
       }
 
       expect(submit).to.have.been.calledOnce
       expect(submit).to.have.been.calledWith
         slot: 'view'
         file: 'video-file'
+        opts:
+          audio:
+            enable: true
+            volume: 0.7
         isVideo: true
         callbacks:
           begin: begin

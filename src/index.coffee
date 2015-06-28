@@ -80,11 +80,12 @@ class Scheduler
       callbacks:  callbacks
       isVideo:    false
 
-  submitVideo: (sname, file, callbacks) ->
+  submitVideo: (sname, file, callbacks, opts) ->
     @_submit
       slot:       sname
       file:       file
       callbacks:  callbacks
+      opts:       opts
       isVideo:    true
 
   _submit: (view) ->
@@ -211,7 +212,7 @@ class Scheduler
     div.innerHTML = view.view
 
   _renderVideoView: (div, view, done) ->
-    @onVideoView? div, view.file, (
+    @onVideoView? div, view.file, view.opts, (
       =>
         done view.slot
         @_onViewEnd view.slot
