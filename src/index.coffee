@@ -201,7 +201,7 @@ class Scheduler
           setTimeout end, view.duration
 
         @root.appendChild div
-        @_fadeIn div, ->
+        @_fadeIn @root, ->
     catch err
       console.log "#{TAG} Error while rendering #{view.slot} view. video=#{view.isVideo}, e=#{err?.message}"
       done view.slot
@@ -225,7 +225,7 @@ class Scheduler
   _cleanAndGetContainer: (cb) ->
     div = @document.getElementById(CONTENT_DIV_ID)
     if div?
-      @_fadeOut div, =>
+      @_fadeOut @root, =>
         @root.removeChild div
         div = null
         cb @_newDiv()
@@ -243,36 +243,27 @@ class Scheduler
     div.style.width = '100%'
     div.style.backgroundColor = '#000'
     div.style.display = 'block'
-    div.style.opacity = 0
     div
 
   _fadeOut: (element, cb) ->
-    opacity = 1
-    decrease = =>
-      opacity -= 0.15
-      if opacity <= 0
-        element?.style.opacity = 0
-        element?.style.display = 'none'
-        cb?()
-      else
-        element?.style.opacity = opacity
-        @window?.requestAnimationFrame decrease
+    if not element?
+      cb()
+      return
 
-    decrease()
+    element.style.setProperty 'transition', 'visibility 0s 0.5s, opacity 0.5s ease-in-out'
+    element.style.setProperty 'visibility', 'hidden'
+    element.style.setProperty 'opacity', '0'
+    setTimeout cb, 500
 
   _fadeIn: (element, cb) ->
-    opacity = 0
-    element.style.display = 'block'
-    increase = =>
-      opacity += 0.15
-      if opacity >= 1
-        element?.style.opacity = 1
-        cb?()
-      else
-        element?.style.opacity = opacity
-        @window?.requestAnimationFrame increase
+    if not element?
+      cb()
+      return
 
-    increase()
+    element.style.setProperty 'transition', 'opacity 0.5s ease-in-out'
+    element.style.setProperty 'visibility', 'visible'
+    element.style.setProperty 'opacity', '1'
+    setTimeout cb, 500
 
   _newDefaultView: (view) ->
     nview =
