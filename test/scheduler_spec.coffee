@@ -94,6 +94,7 @@ describe 'Scheduler', ->
     it 'should submit the view', ->
       @scheduler.register 'view'
       begin = ->
+      ready = ->
       end = ->
       error = ->
 
@@ -101,6 +102,7 @@ describe 'Scheduler', ->
 
       @scheduler.submitView 'view', '<html>', 5000, {
         begin: begin
+        ready: ready
         end: end
         error: error
       }
@@ -113,6 +115,7 @@ describe 'Scheduler', ->
         isVideo: false
         callbacks:
           begin: begin
+          ready: ready
           end: end
           error: error
 
@@ -120,6 +123,7 @@ describe 'Scheduler', ->
     it 'should submit the view', ->
       @scheduler.register 'view'
       begin = ->
+      ready = ->
       end = ->
       error = ->
 
@@ -127,6 +131,7 @@ describe 'Scheduler', ->
 
       @scheduler.submitVideo 'view', 'video-file', {
         begin: begin
+        ready: ready
         end: end
         error: error
       }, {
@@ -146,6 +151,7 @@ describe 'Scheduler', ->
         isVideo: true
         callbacks:
           begin: begin
+          ready: ready
           end: end
           error: error
 
@@ -470,6 +476,7 @@ describe 'Scheduler', ->
 
     it 'should call the error callback on error', ->
       begin = sinon.stub()
+      ready = sinon.stub()
       error = sinon.stub()
       end = sinon.stub()
 
@@ -483,6 +490,7 @@ describe 'Scheduler', ->
         duration: 1000
         callbacks:
           begin: begin
+          ready: ready
           end: end
           error: error
 
@@ -493,10 +501,12 @@ describe 'Scheduler', ->
       expect(error).to.have.been.calledOnce
       expect(done).to.have.been.calledOnce
       expect(done).to.have.been.calledWith 'view'
+      expect(ready).to.not.have.been.called
       expect(end).to.not.have.been.called
 
     it 'should render html', (done) ->
       begin = sinon.stub()
+      ready = sinon.stub()
       error = sinon.stub()
       end = sinon.stub()
       div = {}
@@ -506,13 +516,14 @@ describe 'Scheduler', ->
       @scheduler.root = @scheduler.document.body
       fadeIn = sinon.stub @scheduler, '_fadeIn', ->
       video = sinon.stub @scheduler, '_renderVideoView', ->
-      html = sinon.stub @scheduler, '_renderHtmlView', ->
+      html = sinon.spy @scheduler, '_renderHtmlView'
       onViewEnd = sinon.stub @scheduler, '_onViewEnd', ->
 
       sinon.stub @scheduler, '_fadeOut', (root, cb) =>
         cb div
 
         expect(begin).to.have.been.calledOnce
+        expect(ready).to.have.been.calledOnce
         expect(error).to.not.have.been.called
         expect(video).to.not.have.been.called
         expect(html).to.have.been.calledOnce
@@ -535,6 +546,7 @@ describe 'Scheduler', ->
         duration: 1000
         callbacks:
           begin: begin
+          ready: ready
           end: end
           error: error
 
@@ -585,6 +597,91 @@ describe 'Scheduler', ->
 
       renderDone = sinon.stub()
       @scheduler._render view, renderDone
+
+  describe '_renderHtmlView', ->
+    it 'should call the ready callback', ->
+      ready = sinon.spy()
+
+      view =
+        slot: 'view'
+        view: '<html>'
+        isVideo: false
+        duration: 1000
+        callbacks:
+          ready: ready
+
+      div = {}
+      @scheduler._renderHtmlView div, view
+      expect(div.innerHTML).to.be.equal '<html>'
+      expect(ready).to.have.been.calledOnce
+
+  describe '_renderVideoView', ->
+    it 'should clean up the previous view', (done) ->
+      div =
+        innerHTML = 'test'
+
+      view =
+        slot: 'view'
+        file: 'video-file'
+        isVideo: true
+        duration: 1000
+
+      @scheduler.onVideoView = (div, file, opts, ready, success, error) ->
+        done()
+
+      @scheduler._renderVideoView div, view, ->
+      expect(div.innerHTML).to.be.empty
+
+    it 'should call the ready and done callbacks when there are no errors', ->
+      ready = sinon.spy()
+      done = sinon.spy()
+      end = sinon.spy()
+      error = sinon.spy()
+      div = {}
+      view =
+        slot: 'view'
+        file: 'video-file'
+        isVideo: true
+        duration: 1000
+        callbacks:
+          ready: ready
+          end: end
+          error: error
+
+      @scheduler.onVideoView = (div, file, opts, onready, onsuccess, onerror) ->
+        onready()
+        onsuccess()
+
+      @scheduler._renderVideoView div, view, done
+      expect(ready).to.have.been.calledOnce
+      expect(end).to.have.been.calledOnce
+      expect(done).to.have.been.calledOnce
+      expect(error).to.not.have.been.called
+
+    it 'should call the error callback when there is an error', ->
+      ready = sinon.spy()
+      end = sinon.spy()
+      done = sinon.spy()
+      error = sinon.spy()
+      div = {}
+      view =
+        slot: 'view'
+        file: 'video-file'
+        isVideo: true
+        duration: 1000
+        callbacks:
+          ready: ready
+          end: end
+          error: error
+
+      @scheduler.onVideoView = (div, file, opts, onready, onsuccess, onerror) ->
+        onerror()
+
+      @scheduler._renderVideoView div, view, done
+      expect(ready).to.not.have.been.called
+      expect(end).to.not.have.been.called
+      expect(error).to.have.been.calledOnce
+      expect(done).to.have.been.calledOnce
 
   describe '_fadeOut', ->
     it 'should set elements opacity and _transitionEndCallback', ->

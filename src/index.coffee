@@ -233,11 +233,15 @@ class Scheduler
 
   _renderHtmlView: (div, view) ->
     div.innerHTML = view.view
+    view.callbacks?.ready?()
 
   _renderVideoView: (div, view, done) ->
     # clear existing content first.
     div.innerHTML = ''
     @onVideoView? div, view.file, view.opts, (
+      ->
+        view.callbacks?.ready?()
+    ), (
       =>
         done view.slot
         @_onViewEnd view.slot
