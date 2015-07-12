@@ -39,7 +39,7 @@ With this registration order, the scheduler will try to show an ad view, then an
 ### Submitting views
 - `submitView(slotName, html, duration, callbacks)`: Submit an HTML view to `slotName`. All resources (images, etc.) being used in html should already be cached.
 - `submitVideo(slotName, videoFile, callbacks)`: Submit a video to `slotName`. Video file should already be cached.
-- `submit` methods accept an optional `callbacks` object. `callbacks` can have `begin`, `end` and `error` properties. Scheduler will call the `callbacks.begin()` right before it starts to process the view and call the `callbacks.end()` when the view finishes. At anytime, when an error occurs, it will call the `callbacks.error()` function.
+- `submit` methods accept an optional `callbacks` object. `callbacks` can have `begin`, `ready`, `end` and `error` properties. Scheduler will call the `callbacks.begin()` right before it starts to process the view and call the `callbacks.end()` when the view finishes. `callbacks.ready()` will get called when the view is attached to the DOM. At anytime, when an error occurs, it will call the `callbacks.error()` function.
 
 ### Configuration options
 - `defaultViewQueueLen`: Number of views to track for the default view.
@@ -63,6 +63,8 @@ class AdView
       begin: =>
         # this will make sure we prepare another ad while the current one is being displayed.
         @run()
+      ready: ->
+        # View is attached to the DOM. We can query the DOM and make modifications as necessary.
       end: -> console.log "AdView finished rendering an ad."
       
     ad = getSomeAd()
