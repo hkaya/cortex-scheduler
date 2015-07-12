@@ -1,6 +1,5 @@
 TAG                     = 'scheduler:'
 
-CONTENT_DIV_ID          = '__cortex_main'
 DEFAULT_VIEW            = '__dv'
 BLACK_SCREEN_SLOT_NAME  = '__bs'
 BLACK_SCREEN =
@@ -33,6 +32,8 @@ class Scheduler
     @_fallbackSlots = {}
     @_fallbackViewOrder = []
     @_current = 0
+
+    @_transitionEndCallback = undefined
 
     @_exit = false
 
@@ -109,11 +110,32 @@ class Scheduler
     @window = window
     @document = document
     @root = root || document.body
+
+    @_initSchedulerRoot()
+
     @_run()
+
+  _initSchedulerRoot: ->
+    if not @root?
+      console.warn "#{TAG} No root node specified."
+      return
+
+    onTransitionEnd = =>
+      @_onTransitionEnd()
+    @root.addEventListener 'webkitTransitionEnd', onTransitionEnd, false
+    @root.style.setProperty 'opacity', '1'
+    @root.style.setProperty 'transition', 'opacity 0.5s linear'
+
+  _onTransitionEnd: ->
+    console.log "#{TAG} Transition ended: #{new Date().getTime()}"
+    if @_transitionEndCallback?
+      @_transitionEndCallback()
+      # make sure this callback will not be called again.
+      @_transitionEndCallback = undefined
 
   _run: ->
     if @_exit
-      console.log "Scheduler will exit."
+      console.log "#{TAG} Scheduler will exit."
       return
 
     st = new Date().getTime()
@@ -188,21 +210,22 @@ class Scheduler
 
       view.callbacks?.begin?()
 
-      @_cleanAndGetContainer (div) =>
+      @_fadeOut @root, =>
         if view.isVideo
-          @_renderVideoView div, view, done
+          @_renderVideoView @root, view, done
 
         else
-          @_renderHtmlView div, view
+          @_renderHtmlView @root, view
+
           end = =>
             done view.slot
             @_onViewEnd view.slot
             view.callbacks?.end?()
 
-          setTimeout end, view.duration
+          global.setTimeout end, view.duration
 
-        @root.appendChild div
         @_fadeIn @root, ->
+
     catch err
       console.log "#{TAG} Error while rendering #{view.slot} view. video=#{view.isVideo}, e=#{err?.message}"
       done view.slot
@@ -212,6 +235,8 @@ class Scheduler
     div.innerHTML = view.view
 
   _renderVideoView: (div, view, done) ->
+    # clear existing content first.
+    div.innerHTML = ''
     @onVideoView? div, view.file, view.opts, (
       =>
         done view.slot
@@ -222,49 +247,22 @@ class Scheduler
         done view.slot
         view.callbacks?.error? err
     )
-    
-  _cleanAndGetContainer: (cb) ->
-    div = @document.getElementById(CONTENT_DIV_ID)
-    if div?
-      @_fadeOut @root, =>
-        @root.removeChild div
-        div = null
-        cb @_newDiv()
-
-    else
-      cb @_newDiv()
-
-  _newDiv: ->
-    div = @document.createElement('div')
-    div.setAttribute 'id', CONTENT_DIV_ID
-    div.style.overflow = 'hidden'
-    div.style.overflowX = 'hidden'
-    div.style.overflowY = 'hidden'
-    div.style.height = '100%'
-    div.style.width = '100%'
-    div.style.backgroundColor = '#000'
-    div.style.display = 'block'
-    div
 
   _fadeOut: (element, cb) ->
     if not element?
       cb()
       return
 
-    element.style.setProperty 'transition', 'visibility 0s 0.5s, opacity 0.5s ease-in-out'
-    element.style.setProperty 'visibility', 'hidden'
     element.style.setProperty 'opacity', '0'
-    setTimeout cb, 500
+    @_transitionEndCallback = cb
 
   _fadeIn: (element, cb) ->
     if not element?
       cb()
       return
 
-    element.style.setProperty 'transition', 'opacity 0.5s ease-in-out'
-    element.style.setProperty 'visibility', 'visible'
     element.style.setProperty 'opacity', '1'
-    setTimeout cb, 500
+    @_transitionEndCallback = cb
 
   _newDefaultView: (view) ->
     nview =

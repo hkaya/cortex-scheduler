@@ -238,7 +238,8 @@ describe 'Scheduler', ->
 
   describe 'start', ->
     it 'should set the root node', ->
-      run = sinon.stub @scheduler, '_run', ->
+      sinon.stub @scheduler, '_run', ->
+      sinon.stub @scheduler, '_initSchedulerRoot', ->
       win =
         k: 'v'
       doc =
@@ -472,7 +473,7 @@ describe 'Scheduler', ->
       error = sinon.stub()
       end = sinon.stub()
 
-      get = sinon.stub @scheduler, '_cleanAndGetContainer', ->
+      get = sinon.stub @scheduler, '_fadeOut', ->
         throw new Error('error')
 
       view =
@@ -508,10 +509,9 @@ describe 'Scheduler', ->
       html = sinon.stub @scheduler, '_renderHtmlView', ->
       onViewEnd = sinon.stub @scheduler, '_onViewEnd', ->
 
-      get = sinon.stub @scheduler, '_cleanAndGetContainer', (cb) =>
+      sinon.stub @scheduler, '_fadeOut', (root, cb) =>
         cb div
 
-        expect(get).to.have.been.calledOnce
         expect(begin).to.have.been.calledOnce
         expect(error).to.not.have.been.called
         expect(video).to.not.have.been.called
@@ -555,10 +555,9 @@ describe 'Scheduler', ->
       html = sinon.stub @scheduler, '_renderHtmlView', ->
       onViewEnd = sinon.stub @scheduler, '_onViewEnd', ->
 
-      get = sinon.stub @scheduler, '_cleanAndGetContainer', (cb) =>
+      sinon.stub @scheduler, '_fadeOut', (root, cb) =>
         cb div
 
-        expect(get).to.have.been.calledOnce
         expect(begin).to.have.been.calledOnce
         expect(error).to.not.have.been.called
         expect(video).to.have.been.calledOnce
@@ -586,3 +585,51 @@ describe 'Scheduler', ->
 
       renderDone = sinon.stub()
       @scheduler._render view, renderDone
+
+  describe '_fadeOut', ->
+    it 'should set elements opacity and _transitionEndCallback', ->
+      el =
+        style:
+          setProperty: sinon.spy()
+
+      cb = sinon.spy()
+
+      @scheduler._fadeOut el, cb
+      expect(cb).to.not.have.been.called
+      expect(@scheduler._transitionEndCallback).to.equal cb
+      expect(el.style.setProperty).to.have.been.calledOnce
+      expect(el.style.setProperty).to.have.been.calledWith 'opacity', '0'
+
+    it 'should call the callback immediately when element is empty', ->
+      cb = sinon.spy()
+
+      @scheduler._fadeOut undefined, cb
+      expect(cb).to.have.been.calledOnce
+
+  describe '_fadeIn', ->
+    it 'should set elements opacity and _transitionEndCallback', ->
+      el =
+        style:
+          setProperty: sinon.spy()
+
+      cb = sinon.spy()
+
+      @scheduler._fadeIn el, cb
+      expect(cb).to.not.have.been.called
+      expect(@scheduler._transitionEndCallback).to.equal cb
+      expect(el.style.setProperty).to.have.been.calledOnce
+      expect(el.style.setProperty).to.have.been.calledWith 'opacity', '1'
+
+    it 'should call the callback immediately when element is empty', ->
+      cb = sinon.spy()
+
+      @scheduler._fadeIn undefined, cb
+      expect(cb).to.have.been.calledOnce
+
+  describe '_onTransitionEnd', ->
+    it 'should call the callback and set it to undefined afterwards', ->
+      cb = sinon.spy()
+      @scheduler._transitionEndCallback = cb
+      @scheduler._onTransitionEnd()
+      expect(cb).to.have.been.calledOnce
+      expect(@scheduler._transitionEndCallback).to.be.undefined
