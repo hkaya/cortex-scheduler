@@ -1,6 +1,6 @@
 {
   "name": "cortex-scheduler",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "A simple scheduler library for Cortex applications.",
   "main": "lib/index.js",
   "scripts": {
