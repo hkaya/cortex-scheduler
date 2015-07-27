@@ -41,9 +41,9 @@ With this registration order, the scheduler will try to show an ad view, then an
 - `submitVideo(slotName, videoFile, callbacks, opts)`: Submit a video to `slotName`. Video file should already be cached.
 - `submit` methods accept an optional `callbacks` object. `callbacks` can have `begin`, `ready`, `end` and `error` properties. Scheduler will call the `callbacks.begin()` right before it starts to process the view and call the `callbacks.end()` when the view finishes. `callbacks.ready()` will get called when the view is attached to the DOM. At anytime, when an error occurs, it will call the `callbacks.error()` function.
 - `submit` methods accept an optional `opts` object. Currently `opts` has the following fields:
-  opts.audio.enable: Enable audio in video playbacks.
-  opts.audio.volume: A floating value in the range of [0, 1] for audio volume.
-  opts.view.label: View label. This value will eventually get displayed to the user. Choose a short and descriptive label to inform users about the content of this view (e.g. Ad asset).
+ - `opts.audio.enable`: Enable audio in video playbacks.
+ - `opts.audio.volume`: A floating value in the range of [0, 1] for audio volume.
+ - `opts.view.label`: View label. This value will eventually get displayed to the user. Choose a short and descriptive label to inform users about the content of this view (e.g. Ad asset).
 
 ### Configuration options
 - `defaultViewQueueLen`: Number of views to track for the default view.
