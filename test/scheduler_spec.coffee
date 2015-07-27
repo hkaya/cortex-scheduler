@@ -105,6 +105,10 @@ describe 'Scheduler', ->
         ready: ready
         end: end
         error: error
+      }, {
+        view: {
+          label: 'test'
+        }
       }
 
       expect(submit).to.have.been.calledOnce
@@ -113,6 +117,9 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 5000
         isVideo: false
+        opts:
+          view:
+            label: 'test'
         callbacks:
           begin: begin
           ready: ready
@@ -138,6 +145,8 @@ describe 'Scheduler', ->
         audio:
           enable: true
           volume: 0.7
+        view:
+          label: 'test'
       }
 
       expect(submit).to.have.been.calledOnce
@@ -148,6 +157,8 @@ describe 'Scheduler', ->
           audio:
             enable: true
             volume: 0.7
+          view:
+            label: 'test'
         isVideo: true
         callbacks:
           begin: begin
@@ -309,7 +320,7 @@ describe 'Scheduler', ->
       done = sinon.stub()
       render = sinon.stub @scheduler, '_render', (v, d) ->
 
-      @scheduler.submitView 'view', '<html>', 1000, {}
+      @scheduler.submitView 'view', '<html>', 1000, {}, {view: {label: 'test'}}
       @scheduler.submitView 'view', '<other html>', 1000, {}
 
       expect(@scheduler._slots.view).to.have.length 2
@@ -325,6 +336,9 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        opts:
+          view:
+            label: 'test'
         callbacks: {}
       expect(@scheduler._slots.view).to.have.length 1
 
@@ -345,6 +359,7 @@ describe 'Scheduler', ->
         view: '<other html>'
         duration: 1000
         isVideo: false
+        opts: undefined
         callbacks: {}
       expect(@scheduler._slots.view).to.have.length 0
 
@@ -380,6 +395,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        opts: undefined
         callbacks: {}
       expect(@scheduler._fallbackSlots['fallback']).to.have.length 0
 

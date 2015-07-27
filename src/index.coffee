@@ -65,7 +65,7 @@ class Scheduler
 
     @_defaultViewQueue.push view
 
-  submitView: (sname, view, duration, callbacks) ->
+  submitView: (sname, view, duration, callbacks, opts) ->
     console.log "#{TAG} New view to be submitted to slot #{sname} with duration #{duration}"
     if not @_isNumeric(duration)
       throw new RangeError("View duration should be in the range of (0, #{@_maxViewDuration})")
@@ -79,6 +79,7 @@ class Scheduler
       view:       view
       duration:   duration
       callbacks:  callbacks
+      opts:       opts
       isVideo:    false
 
   submitVideo: (sname, file, callbacks, opts) ->
@@ -219,7 +220,7 @@ class Scheduler
 
           end = =>
             done view.slot
-            @_onViewEnd view.slot
+            @_onViewEnd view
             view.callbacks?.end?()
 
           global.setTimeout end, view.duration
@@ -247,7 +248,7 @@ class Scheduler
     ), (
       =>
         done view.slot
-        @_onViewEnd view.slot
+        @_onViewEnd view
         view.callbacks?.end?()
     ), (
       (err) ->
@@ -286,8 +287,8 @@ class Scheduler
 
     nview
 
-  _onViewEnd: (sname) ->
-    @onViewEnd? sname
+  _onViewEnd: (view) ->
+    @onViewEnd? view
 
   _isNumeric: (n) ->
     !isNaN(parseFloat(n)) && isFinite(n)
