@@ -13,7 +13,7 @@ There are three priority levels that apps can submit view requests to.
 
 - `Normal (L1)`: This is the common level where apps should submit regular view requests.
 - `Fallback (L2)`: Views in this level will only get displayed when no L1 view is available.
-- `Default (L3)`: When both L1 and L2 fails, scheduler will display views in L3. When marked as default, cortex-scheduler will track submissions to a slot and automatically play them as L3 views.
+- `Default (L3)`: When both L1 and L2 fails, scheduler will display views in L3. When marked as default, cortex-scheduler will track submissions to a slot and automatically play them as L3 views. Alternatively, default view slot can be a separate slot from any L1 and L2 slots. It is user's responsibility to submit views to this slot.
 
 ## View Order
 You may define the view order of the slots by registering slots in the order you want. Take the following example:
@@ -34,7 +34,13 @@ With this registration order, the scheduler will try to show an ad view, then an
 - Multiple calls to `register()` with the same slot name is valid. It will modify the view order.
 
 ### Setting a default view
-- `setDefaultView(slotName)`: Scheduler will track submissions to the slot `slotName` and use them when everything else fails. `slotName` must be already registered. It is not mandatory to set a default view but it is a good practice to prevent black screens.
+- `setDefaultView(slotName)`: Sets a default view slot to be used when everything else fails. There are two ways of setting a default view slot:
+ - When `slotName` is an existing slot (either primary or fallback, registered with `register()`), scheduler will track submissions to the slot `slotName` and use them when everything else fails. The callbacks passed with original views will not get called in this case.
+ - When `slotName` is not an existing slot, scheduler will set up a regular slot for default views. It is user's responsibility to submit default views to this slot using the `submitView` or `submitVideo` calls. The callbacks passed with the views will get called in this case.
+ 
+ It is not mandatory to set a default view but it is a good practice to prevent black screens.
+
+ Note that default views are the final line of defense against black screens. It is a good idea to not make default views rely on anything that can fail (e.g. network I/O). Ideally, default views should make use of content that is being shipped as part of the application.
 
 ### Submitting views
 - `submitView(slotName, html, duration, callbacks, opts)`: Submit an HTML view to `slotName`. All resources (images, etc.) being used in html should already be cached.
@@ -85,6 +91,9 @@ editorialView = new EditorialView()
 
 CortexView.register 'AdView', 'EditorialView'
 CortexView.setDefaultView 'AdView'
+# Alternatively, you can create a new slot for default views.
+# CortexView.setDefaultView 'DefaultView'
+# Set up a way to submit views to DefaultView.
 
 adView.run()
 editorialView.run()
