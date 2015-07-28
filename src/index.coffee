@@ -26,6 +26,11 @@ class Scheduler
     @_defaultView = undefined
     @_defaultViewQueue = []
     @_defaultViewRenderIndex = 0
+    # Track mode for the default view.
+    # If true, default view will keep track of past @_defaultViewQueueLen
+    # submitted views. Rendering a default view will not remove it from the
+    # queue. Also, all callbacks will get removed from the tracked views.
+    @_defaultViewTrackMode = false
 
     @_slots = {}
     @_viewOrder = []
@@ -41,7 +46,8 @@ class Scheduler
     @_exit = true
 
   register: (sname, fallback) ->
-    console.log "#{TAG} Registering new slot: #{sname} with fallback: #{fallback}"
+    console.log """#{TAG} Registering new slot: #{sname} with \
+      fallback: #{fallback}"""
     if not @_slots[sname]?
       @_slots[sname] = []
 
@@ -53,26 +59,29 @@ class Scheduler
         @_fallbackViewOrder.push fallback
 
   setDefaultView: (sname) ->
-    console.log "#{TAG} Setting default view to #{sname}"
+    @_defaultView = sname
     if sname of @_slots or sname of @_fallbackSlots
-      @_defaultView = sname
-    else
-      throw new Error("Unknown view slot: #{sname}")
+      @_defaultViewTrackMode = true
+
+    console.log """#{TAG} Setting default view to #{@_defaultView}. \
+      Track mode: #{@_defaultViewTrackMode}"""
 
   _submitDefaultView: (view) ->
-    if @_defaultViewQueue.length >= @_defaultViewQueueLen
+    if (@_defaultViewTrackMode and
+        @_defaultViewQueue.length >= @_defaultViewQueueLen)
       @_defaultViewQueue.shift()
 
     @_defaultViewQueue.push view
 
   submitView: (sname, view, duration, callbacks, opts) ->
-    console.log "#{TAG} New view to be submitted to slot #{sname} with duration #{duration}"
     if not @_isNumeric(duration)
-      throw new RangeError("View duration should be in the range of (0, #{@_maxViewDuration})")
+      throw new RangeError(
+        "View duration should be in the range of (0, #{@_maxViewDuration})")
 
     duration = Number(duration)
     if duration <= 0 or duration > @_maxViewDuration
-      throw new RangeError("View duration should be in the range of (0, #{@_maxViewDuration})")
+      throw new RangeError(
+        "View duration should be in the range of (0, #{@_maxViewDuration})")
 
     @_submit
       slot:       sname
@@ -91,8 +100,15 @@ class Scheduler
       isVideo:    true
 
   _submit: (view) ->
+    console.log """#{TAG} New view to be submitted to slot #{view.slot}. \
+      isVideo=#{view.isVideo}, duration=#{view.duration} \
+      file=#{view.file}, label=#{view.opts?.view?.label}"""
     if view.slot is @_defaultView
       @_submitDefaultView @_newDefaultView(view)
+      if not @_defaultViewTrackMode
+        # default view is not in track mode. we shouldn't submit this view to
+        # another slot.
+        return
 
     if view.slot of @_slots
       @_slots[view.slot].push view
@@ -173,7 +189,8 @@ class Scheduler
 
     if cslot?.length > 0
       view = cslot.shift()
-      console.log "#{TAG} Rendering a view from #{sname} for #{view.duration} msecs."
+      console.log """#{TAG} Rendering a view from #{sname} for \
+        #{view.duration} msecs."""
       @_render view, done
       return true
 
@@ -185,7 +202,8 @@ class Scheduler
         slot = @_fallbackSlots[sname]
         if slot.length > 0
           fallback = slot.shift()
-          console.log "#{TAG} Rendering a fallback view from #{sname} for #{fallback.duration} msecs."
+          console.log """#{TAG} Rendering a fallback view from #{sname} \
+            for #{fallback.duration} msecs."""
           @_render fallback, done
           return
 
@@ -193,16 +211,26 @@ class Scheduler
 
   _renderDefaultView: (done) ->
     if @_defaultViewQueue.length > 0
-      if @_defaultViewRenderIndex >= @_defaultViewQueue.length
-        @_defaultViewRenderIndex = 0
+      if @_defaultViewTrackMode
+        # In track mode we don't consume the views, instead we just rotate them.
+        if @_defaultViewRenderIndex >= @_defaultViewQueue.length
+          @_defaultViewRenderIndex = 0
 
-      view = @_defaultViewQueue[@_defaultViewRenderIndex]
-      @_defaultViewRenderIndex += 1
-      console.warn "#{TAG} Rendering the default view for #{view.duration} msecs."
+        view = @_defaultViewQueue[@_defaultViewRenderIndex]
+        @_defaultViewRenderIndex += 1
+
+      else
+        # Non-track mode works same as the regular view slots. We need to
+        # consume the views that are displayed.
+        view = @_defaultViewQueue.shift()
+
+      console.warn """#{TAG} Rendering the default view for \
+        #{view.duration} msecs."""
       @_render view, done
 
     else
-      console.warn "#{TAG} BLACK SCREEN!!!!!!! for #{BLACK_SCREEN.duration} msecs."
+      console.warn """#{TAG} BLACK SCREEN!!!!!!! for \
+        #{BLACK_SCREEN.duration} msecs."""
       @_render BLACK_SCREEN, done
 
   _render: (view, done) ->
@@ -228,7 +256,8 @@ class Scheduler
         @_fadeIn @root, ->
 
     catch err
-      console.log "#{TAG} Error while rendering #{view.slot} view. video=#{view.isVideo}, e=#{err?.message}"
+      console.log """#{TAG} Error while rendering #{view.slot} view. \
+        video=#{view.isVideo}, e=#{err?.message}"""
       done view.slot
       view.callbacks?.error? err
 
@@ -272,9 +301,13 @@ class Scheduler
     element.style.setProperty 'opacity', '1'
     @_transitionEndCallback = cb
 
+  # Converts a regular view to a default view.
+  # When default view queue is in track mode, this method should remove the
+  # callbacks.
   _newDefaultView: (view) ->
     nview =
       slot: DEFAULT_VIEW
+      opts: view.opts
 
     if view.isVideo
       nview.isVideo = true
@@ -285,6 +318,9 @@ class Scheduler
       nview.view = view.view
       nview.duration = view.duration
 
+    if not @_defaultViewTrackMode
+      nview.callbacks = view.callbacks
+
     nview
 
   _onViewEnd: (view) ->
@@ -292,6 +328,5 @@ class Scheduler
 
   _isNumeric: (n) ->
     !isNaN(parseFloat(n)) && isFinite(n)
-
 
 module.exports = Scheduler

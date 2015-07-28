@@ -233,14 +233,17 @@ describe 'Scheduler', ->
 
       expect(fn).to.throw Error
 
-    it 'should add the view to the default queue', ->
+    it 'should add the stripped view to the default queue in track mode', ->
       @scheduler.register 'primary', 'fallback'
       @scheduler.setDefaultView 'primary'
+      expect(@scheduler._defaultViewTrackMode).to.be.true
 
       view =
         slot: 'primary'
         view: '<html>'
         duration: 1000
+        opts:
+          k: 'v'
         callbacks: {}
         isVideo: false
 
@@ -252,6 +255,36 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        opts:
+          k: 'v'
+
+    it 'should add the original view to the default queue in non-track mode', ->
+      @scheduler.register 'primary', 'fallback'
+      @scheduler.setDefaultView 'default'
+      expect(@scheduler._defaultViewTrackMode).to.be.false
+
+      callbacks =
+        begin: ->
+      view =
+        slot: 'default'
+        view: '<html>'
+        duration: 1000
+        opts:
+          k: 'v'
+        callbacks: callbacks
+        isVideo: false
+
+      expect(@scheduler._defaultViewQueue).to.have.length 0
+      @scheduler._submit view
+      expect(@scheduler._defaultViewQueue).to.have.length 1
+      expect(@scheduler._defaultViewQueue[0]).to.deep.equal
+        slot: DEFAULT_VIEW
+        view: '<html>'
+        duration: 1000
+        isVideo: false
+        callbacks: callbacks
+        opts:
+          k: 'v'
 
   describe 'start', ->
     it 'should set the root node', ->
@@ -400,23 +433,25 @@ describe 'Scheduler', ->
       expect(@scheduler._fallbackSlots['fallback']).to.have.length 0
 
   describe 'setDefaultView', ->
-    it 'should set the default view', ->
+    it 'should set a default view', ->
+      expect(@scheduler._defaultView).to.be.an 'undefined'
+      @scheduler.setDefaultView 'default-view'
+      expect(@scheduler._defaultViewTrackMode).to.be.false
+      expect(@scheduler._defaultView).to.be.equal 'default-view'
+
+    it 'should set a primary slot as default', ->
       expect(@scheduler._defaultView).to.be.an 'undefined'
       @scheduler.register 'view'
       @scheduler.setDefaultView 'view'
+      expect(@scheduler._defaultViewTrackMode).to.be.true
       expect(@scheduler._defaultView).to.be.equal 'view'
 
     it 'should set a fallback slot as default', ->
       expect(@scheduler._defaultView).to.be.an 'undefined'
       @scheduler.register 'view', 'fallback'
       @scheduler.setDefaultView 'fallback'
+      expect(@scheduler._defaultViewTrackMode).to.be.true
       expect(@scheduler._defaultView).to.be.equal 'fallback'
-
-    it 'should throw if there are no slots', ->
-      fn = =>
-        @scheduler.setDefaultView 'view'
-
-      expect(fn).to.throw Error
 
   describe '_submitDefaultView', ->
     it 'should add the view to the queue', ->
@@ -428,7 +463,11 @@ describe 'Scheduler', ->
       @scheduler._submitDefaultView view
       expect(@scheduler._defaultViewQueue).to.have.length 2
 
-    it 'should replace old views when queue is full', ->
+    it 'should replace old views when queue is full in track mode', ->
+      sv = (v) =>
+        @scheduler._newDefaultView v
+
+      @scheduler._defaultViewTrackMode = true
       @scheduler._defaultViewQueueLen = 2
       expect(@scheduler._defaultViewQueue).to.have.length 0
       @scheduler._submitDefaultView id: 1
@@ -443,10 +482,28 @@ describe 'Scheduler', ->
       expect(@scheduler._defaultViewQueue).to.have.length 2
       expect(@scheduler._defaultViewQueue).to.deep.equal [{id: 3}, {id: 4}]
 
+    it 'should keep adding views to the queue when not in track mode', ->
+      sv = (v) =>
+        @scheduler._newDefaultView v
+
+      @scheduler._defaultViewTrackMode = false
+      @scheduler._defaultViewQueueLen = 2
+      expect(@scheduler._defaultViewQueue).to.have.length 0
+      @scheduler._submitDefaultView id: 1
+      expect(@scheduler._defaultViewQueue).to.have.length 1
+      @scheduler._submitDefaultView id: 2
+      expect(@scheduler._defaultViewQueue).to.have.length 2
+      expect(@scheduler._defaultViewQueue).to.deep.equal [{id: 1}, {id: 2}]
+      @scheduler._submitDefaultView id: 3
+      expect(@scheduler._defaultViewQueue).to.have.length 3
+      expect(@scheduler._defaultViewQueue).to.deep.equal [
+        {id: 1}, {id: 2}, {id: 3}]
+
   describe '_renderDefaultView', ->
-    it 'should show a default view', ->
+    it 'should show a default view without consuming it in track mode', ->
       @scheduler.register 'ad-view'
       @scheduler.setDefaultView 'ad-view'
+      expect(@scheduler._defaultViewTrackMode).to.be.true
       @scheduler.submitView 'ad-view', '<html>', 1000, {}
       render = sinon.stub @scheduler, '_render', (v, d) ->
       expect(@scheduler._defaultViewQueue).to.have.length 1
@@ -459,8 +516,32 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        opts: undefined
       expect(@scheduler._defaultViewQueue).to.have.length 1
       expect(@scheduler._defaultViewRenderIndex).to.be.equal 1
+
+    it 'should consume a default view in non-track mode', ->
+      @scheduler.register 'ad-view'
+      @scheduler.setDefaultView 'default'
+      expect(@scheduler._defaultViewTrackMode).to.be.false
+      callbacks =
+        begin: ->
+      @scheduler.submitView 'default', '<html>', 1000, callbacks
+      render = sinon.stub @scheduler, '_render', (v, d) ->
+      expect(@scheduler._defaultViewQueue).to.have.length 1
+      expect(@scheduler._defaultViewRenderIndex).to.be.equal 0
+      done = ->
+      @scheduler._renderDefaultView done
+      expect(render).to.have.been.calledOnce
+      expect(render).to.have.been.calledWith
+        slot: DEFAULT_VIEW
+        view: '<html>'
+        duration: 1000
+        isVideo: false
+        callbacks: callbacks
+        opts: undefined
+      expect(@scheduler._defaultViewQueue).to.have.length 0
+      expect(@scheduler._defaultViewRenderIndex).to.be.equal 0
 
     it 'should render the black screen if there are no default views available', ->
       render = sinon.stub @scheduler, '_render', (v, d) ->
@@ -746,3 +827,50 @@ describe 'Scheduler', ->
       @scheduler._onTransitionEnd()
       expect(cb).to.have.been.calledOnce
       expect(@scheduler._transitionEndCallback).to.be.undefined
+
+  describe '_newDefaultView', ->
+    it 'should update slot name', ->
+     callbacks =
+        begin: ->
+      v =
+        slot: 'view'
+        view: '<html>'
+        duration: 5000
+        isVideo: false
+        opts:
+          view:
+            label: 'test'
+        callbacks: callbacks
+      nv = @scheduler._newDefaultView v
+      expect(nv).to.deep.equal
+        slot: DEFAULT_VIEW
+        view: '<html>'
+        duration: 5000
+        isVideo: false
+        opts:
+          view:
+            label: 'test'
+        callbacks: callbacks
+
+    it 'should strip callbacks in track mode', ->
+     callbacks =
+        begin: ->
+      v =
+        slot: 'view'
+        view: '<html>'
+        duration: 5000
+        isVideo: false
+        opts:
+          view:
+            label: 'test'
+        callbacks: callbacks
+      @scheduler._defaultViewTrackMode = true
+      nv = @scheduler._newDefaultView v
+      expect(nv).to.deep.equal
+        slot: DEFAULT_VIEW
+        view: '<html>'
+        duration: 5000
+        isVideo: false
+        opts:
+          view:
+            label: 'test'
