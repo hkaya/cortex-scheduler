@@ -8,7 +8,7 @@ BLACK_SCREEN = '__bs'
 
 describe 'Scheduler', ->
   beforeEach ->
-    @scheduler = new Scheduler (->), (->)
+    @scheduler = new Scheduler {}, (->), (->)
 
   afterEach ->
 
@@ -307,11 +307,132 @@ describe 'Scheduler', ->
       @scheduler.start win, doc, 'root'
       expect(@scheduler.root).to.equal 'root'
 
+    it 'should set health check parameters', ->
+      sinon.stub @scheduler, '_run', ->
+      sinon.stub @scheduler, '_initSchedulerRoot', ->
+      win =
+        k: 'v'
+      doc =
+        body: 'test'
+
+      expect(@scheduler._started).to.be.false
+      expect(@scheduler._schedulerStartTime).to.equal 0
+
+      @scheduler.start win, doc
+
+      expect(@scheduler._started).to.be.true
+      expect(@scheduler._schedulerStartTime).to.be.above 0
+
+  describe 'onHealthCheck', ->
+    beforeEach ->
+      @now = new Date().getTime()
+      @clock = sinon.useFakeTimers @now
+
+    afterEach ->
+      @clock.restore()
+
+    it 'should succeed when exit flag is set', ->
+      sinon.stub @scheduler, '_run', ->
+      sinon.stub @scheduler, '_initSchedulerRoot', ->
+      win =
+        k: 'v'
+      doc =
+        body: 'test'
+      @scheduler.start win, doc
+      @scheduler.exit()
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.true
+
+    it 'should succeed when scheduler has not been started yet', ->
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.true
+
+    it 'should fail when last run time is too old', ->
+      sinon.stub @scheduler, '_initSchedulerRoot', ->
+      sinon.stub @scheduler, '_renderDefaultView', ->
+      win =
+        k: 'v'
+      doc =
+        body: 'test'
+      @scheduler.start win, doc
+      @scheduler._run()
+      expect(@scheduler._lastRunTime).to.be.equal @now
+      # Move the clock more than HC_LAST_RUN_THRESHOLD.
+      timePassed = 6 * 60 * 1000
+      @clock.tick timePassed
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.false
+      expect(res.reason).to.match /Scheduler has stopped working/
+      @scheduler._run()
+      expect(@scheduler._lastRunTime).to.be.equal @now + timePassed
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.true
+
+    it 'should not fail due to black screens if application just started', ->
+      sinon.stub @scheduler, '_initSchedulerRoot', ->
+      sinon.stub @scheduler, '_renderDefaultView', ->
+      win =
+        k: 'v'
+      doc =
+        body: 'test'
+      @scheduler.start win, doc
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.true
+      @scheduler._consecutiveBlackScreens = 1000
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.true
+
+    it 'should fail if number of black screens exceed the threshold', ->
+      sinon.stub @scheduler, '_initSchedulerRoot', ->
+      sinon.stub @scheduler, '_renderDefaultView', ->
+      win =
+        k: 'v'
+      doc =
+        body: 'test'
+      @scheduler.start win, doc
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.true
+      @scheduler._consecutiveBlackScreens = 1000
+      @scheduler._run()
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.true
+      @clock.tick 6 * 60 * 1000
+      # this is needed to bypass the _run() health check.
+      @scheduler._run()
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.false
+      expect(res.reason).to.match /Application is rendering black screens/
+
+    it 'should succeed when all health checks passes', ->
+      sinon.stub @scheduler, '_initSchedulerRoot', ->
+      sinon.stub @scheduler, '_renderDefaultView', ->
+      win =
+        k: 'v'
+      doc =
+        body: 'test'
+      @scheduler.start win, doc
+      @scheduler._consecutiveBlackScreens = 0
+      @scheduler._run()
+      res = @scheduler.onHealthCheck()
+      expect(res.status).to.be.true
+
   describe '_run', ->
     it 'should show the default view if there are no views', ->
       renderDefaultView = sinon.stub @scheduler, '_renderDefaultView', ->
       @scheduler._run()
       expect(renderDefaultView).to.have.been.calledOnce
+
+    it 'should set the last run time', (done) ->
+      sinon.stub @scheduler, '_renderDefaultView', ->
+      expect(@scheduler._lastRunTime).to.equal 0
+      @scheduler._run()
+      expect(@scheduler._lastRunTime).to.be.above 0
+      lr = @scheduler._lastRunTime
+      t = =>
+        @scheduler._run()
+        expect(@scheduler._lastRunTime).to.be.above lr
+        done()
+      setTimeout t, 10
 
   describe '_tryToRenderCurrent', ->
     it 'should return when viewOrder is empty', ->
@@ -546,10 +667,12 @@ describe 'Scheduler', ->
     it 'should render the black screen if there are no default views available', ->
       render = sinon.stub @scheduler, '_render', (v, d) ->
       done = ->
+      expect(@scheduler._consecutiveBlackScreens).to.be.equal 0
       @scheduler._renderDefaultView done
       expect(render).to.have.been.calledOnce
       view = render.args[0][0]
       expect(view.slot).to.be.equal BLACK_SCREEN
+      expect(@scheduler._consecutiveBlackScreens).to.be.equal 1
 
   describe '_render', ->
     beforeEach ->
@@ -874,3 +997,28 @@ describe 'Scheduler', ->
         opts:
           view:
             label: 'test'
+
+  describe '_onViewEnd', ->
+    it 'should call the onViewEnd callback', ->
+      view =
+        slot: 'test'
+
+      onViewEnd = sinon.spy()
+      scheduler = new Scheduler {}, (->), onViewEnd
+      scheduler._onViewEnd view
+      expect(onViewEnd).to.have.been.calledOnce
+      expect(onViewEnd).to.have.been.calledWith view
+
+    it 'should reset the black screen counter when the view is not a black screen', ->
+      view =
+        slot: 'test'
+      @scheduler._consecutiveBlackScreens = 10
+      @scheduler._onViewEnd view
+      expect(@scheduler._consecutiveBlackScreens).to.be.equal 0
+
+    it 'should not reset the black screen counter when the view is a black screen', ->
+      view =
+        slot: BLACK_SCREEN
+      @scheduler._consecutiveBlackScreens = 10
+      @scheduler._onViewEnd view
+      expect(@scheduler._consecutiveBlackScreens).to.be.equal 10

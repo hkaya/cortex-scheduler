@@ -11,6 +11,15 @@ BLACK_SCREEN =
     error: (err) ->
       console.log "#{TAG} Even black screens fail... err=#{err?.message}"
 
+# Health check will fail if enough time passes since the last _run() call.
+HC_LAST_RUN_THRESHOLD = 5 * 60 * 1000
+# Black screens will get considered for health checks only when enough time
+# passes since the start of the scheduler. It might take awhile for Cortex
+# apps to prepare a view. So it is expected to see some black screens initially.
+HC_BLACKSCREEN_ACTIVATION_TIME = 5 * 60 * 1000
+# After a number of black screens it is safe to assume that something is wrong.
+HC_BLACKSCREEN_THRESHOLD = 10
+
 class Scheduler
   constructor: (opts, @onVideoView, @onViewEnd) ->
     opts ?= {}
@@ -41,6 +50,10 @@ class Scheduler
     @_transitionEndCallback = undefined
 
     @_exit = false
+    @_started = false
+    @_schedulerStartTime = 0
+    @_lastRunTime = 0
+    @_consecutiveBlackScreens = 0
 
   exit: ->
     @_exit = true
@@ -119,7 +132,7 @@ class Scheduler
 
   start: (window, document, root) ->
     if not @_defaultView?
-      console.warn """Scheduler: No default view is set. Consider selecting
+      console.warn """Scheduler: No default view is set. Consider selecting \
         one of the view slots as default by calling setDefaultView(slotName). \
         Views from the default slot will get played automatically when \
         everything else fail."""
@@ -130,7 +143,23 @@ class Scheduler
 
     @_initSchedulerRoot()
 
+    @_started = true
+    @_schedulerStartTime = new Date().getTime()
     @_run()
+
+  onHealthCheck: ->
+    if @_exit or not @_started
+      return status: true
+
+    now = new Date().getTime()
+    if @_lastRunTime + HC_LAST_RUN_THRESHOLD < now
+      return {status: false, reason: 'Scheduler has stopped working.'}
+
+    if ((@_schedulerStartTime + HC_BLACKSCREEN_ACTIVATION_TIME < now) and
+        (@_consecutiveBlackScreens > HC_BLACKSCREEN_THRESHOLD))
+      return {status: false, reason: 'Application is rendering black screens.'}
+
+    return status: true
 
   _initSchedulerRoot: ->
     if not @root?
@@ -155,9 +184,9 @@ class Scheduler
       console.log "#{TAG} Scheduler will exit."
       return
 
-    st = new Date().getTime()
+    @_lastRunTime = new Date().getTime()
     done = (sname) =>
-      et = new Date().getTime() - st
+      et = new Date().getTime() - @_lastRunTime
       console.log "#{TAG} #{sname} completed in #{et} msecs."
       process.nextTick => @_run()
 
@@ -231,6 +260,7 @@ class Scheduler
     else
       console.warn """#{TAG} BLACK SCREEN!!!!!!! for \
         #{BLACK_SCREEN.duration} msecs."""
+      @_consecutiveBlackScreens += 1
       @_render BLACK_SCREEN, done
 
   _render: (view, done) ->
@@ -324,6 +354,9 @@ class Scheduler
     nview
 
   _onViewEnd: (view) ->
+    if view.slot != BLACK_SCREEN_SLOT_NAME
+      @_consecutiveBlackScreens = 0
+
     @onViewEnd? view
 
   _isNumeric: (n) ->
