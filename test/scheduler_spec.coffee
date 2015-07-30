@@ -59,6 +59,23 @@ describe 'Scheduler', ->
       expect(@scheduler._fallbackSlots.fallback).to.have.length 0
       expect(@scheduler._fallbackViewOrder).to.deep.equal ['fallback']
 
+    it 'should not register a slot if the default view is in non-track mode', ->
+      @scheduler.setDefaultView 'default'
+      expect(=> @scheduler.register 'default').to.throw 'is already registered'
+      expect(=> @scheduler.register 'primary', 'default').to.throw 'is already registered'
+
+    it 'should register a slot if the default view is tracking a primary slot', ->
+      @scheduler.register 'view', 'fallback'
+      @scheduler.setDefaultView 'view'
+      expect(=> @scheduler.register 'view').to.not.throw
+      expect(=> @scheduler.register 'fallback').to.not.throw
+
+    it 'should register a slot if the default view is tracking a fallback slot', ->
+      @scheduler.register 'view', 'fallback'
+      @scheduler.setDefaultView 'fallback'
+      expect(=> @scheduler.register 'view').to.not.throw
+      expect(=> @scheduler.register 'fallback').to.not.throw
+
   describe 'submitView', ->
     it 'should throw if duration is not numeric', ->
       @scheduler.register 'view'

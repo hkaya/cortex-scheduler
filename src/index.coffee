@@ -61,6 +61,14 @@ class Scheduler
   register: (sname, fallback) ->
     console.log """#{TAG} Registering new slot: #{sname} with \
       fallback: #{fallback}"""
+
+    if (not @_defaultViewTrackMode and not not @_defaultView and
+        (@_defaultView == sname or @_defaultView == fallback))
+      throw new Error """#{@_defaultView} is already registered as the \
+        default view. You should register a slot before calling \
+        the setDefaultView(), if you want the default slot to track \
+        submissions to #{@_defaultView}."""
+
     if not @_slots[sname]?
       @_slots[sname] = []
 
