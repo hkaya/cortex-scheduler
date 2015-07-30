@@ -51,6 +51,14 @@ With this registration order, the scheduler will try to show an ad view, then an
  - `opts.audio.volume`: A floating value in the range of [0, 1] for audio volume.
  - `opts.view.label`: View label. This value will eventually get displayed to the user. Choose a short and descriptive label to inform users about the content of this view (e.g. Ad asset).
 
+#### NOOP Views
+A NOOP view forces the scheduler to render a view from a lower priorty level slot.
+- `submitNoop(slotName, callbacks)`: Submits a NOOP view to `slotName`.
+- When rendering an L1 view, if the view is NOOP, the scheduler will try to render a view in L2 (and eventually an L3 view if L2 is not available).
+- When rendering an L2 view, if the view is NOOP, the scheduler will try to render a view in L3.
+- NOOP views are not allowed in L3 views.
+- Before rendering the alternative view for a NOOP view, the scheduler will fire `begin`, `ready` and `end` callbacks of the NOOP view in that order. 
+
 ### Configuration options
 - `defaultViewQueueLen`: Number of views to track for the default view.
 - `maxViewDuration`: Max view duration in milliseconds. Views with longer duration will get rejected.
