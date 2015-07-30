@@ -117,6 +117,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 5000
         isVideo: false
+        isNoop: false
         opts:
           view:
             label: 'test'
@@ -160,11 +161,33 @@ describe 'Scheduler', ->
           view:
             label: 'test'
         isVideo: true
+        isNoop: false
         callbacks:
           begin: begin
           ready: ready
           end: end
           error: error
+
+  describe 'submitNoop', ->
+    it 'should submit a noop view', ->
+      @scheduler.register 'noop'
+      begin = ->
+      ready = ->
+      end = ->
+      error = ->
+      callbacks =
+        begin: begin
+        ready: ready
+        end: end
+        error: error
+
+      submit = sinon.spy @scheduler, '_submit'
+      @scheduler.submitNoop 'noop', callbacks
+      expect(submit).to.have.been.calledOnce
+      expect(submit).to.have.been.calledWith
+        slot: 'noop'
+        isNoop: true
+        callbacks: callbacks
 
   describe '_submit', ->
     it 'should add the view to its slot', ->
@@ -246,6 +269,7 @@ describe 'Scheduler', ->
           k: 'v'
         callbacks: {}
         isVideo: false
+        isNoop: false
 
       expect(@scheduler._defaultViewQueue).to.have.length 0
       @scheduler._submit view
@@ -255,6 +279,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        isNoop: false
         opts:
           k: 'v'
 
@@ -273,6 +298,7 @@ describe 'Scheduler', ->
           k: 'v'
         callbacks: callbacks
         isVideo: false
+        isNoop: false
 
       expect(@scheduler._defaultViewQueue).to.have.length 0
       @scheduler._submit view
@@ -282,9 +308,32 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        isNoop: false
         callbacks: callbacks
         opts:
           k: 'v'
+
+    it 'should throw for default queue submits when view is noop and default queue is in non-track mode', ->
+      @scheduler.setDefaultView 'default'
+      expect(@scheduler._defaultViewTrackMode).to.be.false
+      view =
+        slot: 'default'
+        isNoop: true
+      expect(=> @scheduler._submit(view)).to.throw /Default views cannot be noop/
+
+    it 'should not add noop views to the default queue in track mode', ->
+      @scheduler.register 'primary', 'fallback'
+      @scheduler.setDefaultView 'primary'
+      expect(@scheduler._defaultViewTrackMode).to.be.true
+
+      view =
+        slot: 'primary'
+        isNoop: true
+
+      expect(@scheduler._defaultViewQueue).to.have.length 0
+      @scheduler._submit view
+      expect(@scheduler._defaultViewQueue).to.have.length 0
+      expect(@scheduler._slots['primary']).to.deep.equal [{slot: 'primary', isNoop: true}]
 
   describe 'start', ->
     it 'should set the root node', ->
@@ -468,6 +517,31 @@ describe 'Scheduler', ->
       expect(render).to.not.have.been.called
       expect(@scheduler._current).to.be.equal 1
 
+    it 'should render a fallback view when the current view is noop', ->
+      @scheduler.register 'view'
+      done = sinon.stub()
+      render = sinon.stub @scheduler, '_render', (v, d) ->
+      renderFallback = sinon.stub @scheduler, '_renderFallbackElseDefaultView', (d) ->
+      fireNoopCallbacks = sinon.stub @scheduler, '_fireNoopCallbacks', (v) ->
+      callbacks =
+        begin: ->
+      @scheduler.submitNoop 'view', callbacks
+
+      expect(@scheduler._slots.view).to.have.length 1
+      expect(@scheduler._current).to.be.equal 0
+      res = @scheduler._tryToRenderCurrent done
+      expect(res).to.be.true
+      expect(@scheduler._current).to.be.equal 1
+      expect(@scheduler._slots.view).to.have.length 0
+      expect(render).to.not.have.been.called
+      expect(renderFallback).to.have.been.calledOnce
+      expect(fireNoopCallbacks).to.have.been.calledOnce
+      expect(renderFallback.args[0][0]).to.equal done
+      expect(fireNoopCallbacks.args[0][0]).to.deep.equal
+        slot: 'view'
+        isNoop: true
+        callbacks: callbacks
+
     it 'should consume a view', ->
       @scheduler.register 'view'
       @scheduler.register 'another'
@@ -490,6 +564,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        isNoop: false
         opts:
           view:
             label: 'test'
@@ -513,9 +588,39 @@ describe 'Scheduler', ->
         view: '<other html>'
         duration: 1000
         isVideo: false
+        isNoop: false
         opts: undefined
         callbacks: {}
       expect(@scheduler._slots.view).to.have.length 0
+
+  describe '_fireNoopCallbacks', ->
+    it 'should not fire callbacks if the view is not noop', ->
+      begin = sinon.spy()
+      @scheduler._fireNoopCallbacks
+        slot: 'test'
+        isNoop: false
+        callbacks:
+          begin: begin
+      expect(begin).to.not.have.been.called
+
+    it 'should fire callbacks if the view is noop', ->
+      begin = sinon.spy()
+      end = sinon.spy()
+      ready = sinon.spy()
+      error = sinon.spy()
+      @scheduler._fireNoopCallbacks
+        slot: 'test'
+        isNoop: true
+        callbacks:
+          begin: begin
+          end: end
+          ready: ready
+          error: error
+
+      expect(begin).to.have.been.calledOnce
+      expect(ready).to.have.been.calledOnce
+      expect(end).to.have.been.calledOnce
+      expect(error).to.not.have.been.called
 
   describe '_renderFallbackElseDefaultView', ->
     it 'should show the default view if there are no fallback slots', ->
@@ -533,6 +638,28 @@ describe 'Scheduler', ->
       expect(render).to.not.have.been.called
       expect(defaultView).to.have.been.calledOnce
 
+    it 'should show the default view if the fallback view is noop and fire noop callbacks', ->
+      @scheduler.register 'view', 'fallback'
+      done = ->
+      defaultView = sinon.stub @scheduler, '_renderDefaultView', (d) ->
+      render = sinon.stub @scheduler, '_render', (v, d) ->
+      fireNoopCallbacks = sinon.stub @scheduler, '_fireNoopCallbacks', (v) ->
+
+      callbacks =
+        begin: ->
+      @scheduler.submitNoop 'fallback', callbacks
+      expect(@scheduler._fallbackSlots['fallback']).to.have.length 1
+      @scheduler._renderFallbackElseDefaultView done
+      expect(render).to.not.have.been.called
+      expect(defaultView).to.have.been.calledOnce
+      expect(defaultView.args[0][0]).to.equal done
+      expect(fireNoopCallbacks).to.have.been.calledOnce
+      expect(fireNoopCallbacks.args[0][0]).to.deep.equal
+        slot: 'fallback'
+        isNoop: true
+        callbacks: callbacks
+      expect(@scheduler._fallbackSlots['fallback']).to.have.length 0
+
     it 'should consume a fallback view', ->
       @scheduler.register 'view', 'fallback'
       @scheduler.submitView 'fallback', '<html>', 1000, {}
@@ -549,6 +676,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        isNoop: false
         opts: undefined
         callbacks: {}
       expect(@scheduler._fallbackSlots['fallback']).to.have.length 0
@@ -620,6 +748,14 @@ describe 'Scheduler', ->
       expect(@scheduler._defaultViewQueue).to.deep.equal [
         {id: 1}, {id: 2}, {id: 3}]
 
+    it 'should not add a noop view to default queue', ->
+      view =
+        slot:   'view'
+        isNoop: true
+      expect(@scheduler._defaultViewQueue).to.have.length 0
+      @scheduler._submitDefaultView view
+      expect(@scheduler._defaultViewQueue).to.have.length 0
+
   describe '_renderDefaultView', ->
     it 'should show a default view without consuming it in track mode', ->
       @scheduler.register 'ad-view'
@@ -637,6 +773,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        isNoop: false
         opts: undefined
       expect(@scheduler._defaultViewQueue).to.have.length 1
       expect(@scheduler._defaultViewRenderIndex).to.be.equal 1
@@ -659,6 +796,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 1000
         isVideo: false
+        isNoop: false
         callbacks: callbacks
         opts: undefined
       expect(@scheduler._defaultViewQueue).to.have.length 0
@@ -960,6 +1098,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 5000
         isVideo: false
+        isNoop: false
         opts:
           view:
             label: 'test'
@@ -970,6 +1109,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 5000
         isVideo: false
+        isNoop: false
         opts:
           view:
             label: 'test'
@@ -983,6 +1123,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 5000
         isVideo: false
+        isNoop: false
         opts:
           view:
             label: 'test'
@@ -994,6 +1135,7 @@ describe 'Scheduler', ->
         view: '<html>'
         duration: 5000
         isVideo: false
+        isNoop: false
         opts:
           view:
             label: 'test'

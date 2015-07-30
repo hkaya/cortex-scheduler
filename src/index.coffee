@@ -80,11 +80,21 @@ class Scheduler
       Track mode: #{@_defaultViewTrackMode}"""
 
   _submitDefaultView: (view) ->
+    if view.isNoop
+      # do not accept noop views for the default slot.
+      return
+
     if (@_defaultViewTrackMode and
         @_defaultViewQueue.length >= @_defaultViewQueueLen)
       @_defaultViewQueue.shift()
 
     @_defaultViewQueue.push view
+
+  submitNoop: (sname, callbacks) ->
+    @_submit
+      slot:       sname
+      isNoop:     true
+      callbacks:  callbacks
 
   submitView: (sname, view, duration, callbacks, opts) ->
     if not @_isNumeric(duration)
@@ -102,6 +112,7 @@ class Scheduler
       duration:   duration
       callbacks:  callbacks
       opts:       opts
+      isNoop:     false
       isVideo:    false
 
   submitVideo: (sname, file, callbacks, opts) ->
@@ -110,14 +121,20 @@ class Scheduler
       file:       file
       callbacks:  callbacks
       opts:       opts
+      isNoop:     false
       isVideo:    true
 
   _submit: (view) ->
     console.log """#{TAG} New view to be submitted to slot #{view.slot}. \
-      isVideo=#{view.isVideo}, duration=#{view.duration} \
-      file=#{view.file}, label=#{view.opts?.view?.label}"""
+      isNoop=#{view.isNoop}, isVideo=#{view.isVideo}, \
+      duration=#{view.duration} file=#{view.file}, \
+      label=#{view.opts?.view?.label}"""
     if view.slot is @_defaultView
+      if not @_defaultViewTrackMode and view.isNoop
+        throw new Error 'Default views cannot be noop.'
+
       @_submitDefaultView @_newDefaultView(view)
+
       if not @_defaultViewTrackMode
         # default view is not in track mode. we shouldn't submit this view to
         # another slot.
@@ -220,10 +237,22 @@ class Scheduler
       view = cslot.shift()
       console.log """#{TAG} Rendering a view from #{sname} for \
         #{view.duration} msecs."""
-      @_render view, done
+      if view.isNoop
+        @_fireNoopCallbacks view
+        @_renderFallbackElseDefaultView done
+      else
+        @_render view, done
       return true
 
     false
+
+  _fireNoopCallbacks: (view) ->
+    if not view.isNoop
+      return
+
+    view.callbacks?.begin?()
+    view.callbacks?.ready?()
+    view.callbacks?.end?()
 
   _renderFallbackElseDefaultView: (done) ->
     if @_fallbackViewOrder.length > 0
@@ -233,8 +262,12 @@ class Scheduler
           fallback = slot.shift()
           console.log """#{TAG} Rendering a fallback view from #{sname} \
             for #{fallback.duration} msecs."""
-          @_render fallback, done
-          return
+          if not fallback.isNoop
+            @_render fallback, done
+            return
+          else
+            @_fireNoopCallbacks fallback
+            # and continue rendering a default view.
 
     @_renderDefaultView done
 
@@ -336,8 +369,9 @@ class Scheduler
   # callbacks.
   _newDefaultView: (view) ->
     nview =
-      slot: DEFAULT_VIEW
-      opts: view.opts
+      slot:   DEFAULT_VIEW
+      opts:   view.opts
+      isNoop: view.isNoop
 
     if view.isVideo
       nview.isVideo = true
