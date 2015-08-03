@@ -172,19 +172,21 @@ class Scheduler
     @_schedulerStartTime = new Date().getTime()
     @_run()
 
-  onHealthCheck: ->
+  onHealthCheck: (report) ->
     if @_exit or not @_started
-      return status: true
+      report status: true
+      return
 
     now = new Date().getTime()
     if @_lastRunTime + HC_LAST_RUN_THRESHOLD < now
-      return {status: false, reason: 'Scheduler has stopped working.'}
+      report {status: false, reason: 'Scheduler has stopped working.'}
 
-    if ((@_schedulerStartTime + HC_BLACKSCREEN_ACTIVATION_TIME < now) and
+    else if ((@_schedulerStartTime + HC_BLACKSCREEN_ACTIVATION_TIME < now) and
         (@_consecutiveBlackScreens > HC_BLACKSCREEN_THRESHOLD))
-      return {status: false, reason: 'Application is rendering black screens.'}
+      report {status: false, reason: 'Application is rendering black screens.'}
 
-    return status: true
+    else
+      report status: true
 
   _initSchedulerRoot: ->
     if not @root?

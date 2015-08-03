@@ -397,7 +397,7 @@ describe 'Scheduler', ->
     afterEach ->
       @clock.restore()
 
-    it 'should succeed when exit flag is set', ->
+    it 'should succeed when exit flag is set', (done) ->
       sinon.stub @scheduler, '_run', ->
       sinon.stub @scheduler, '_initSchedulerRoot', ->
       win =
@@ -406,14 +406,16 @@ describe 'Scheduler', ->
         body: 'test'
       @scheduler.start win, doc
       @scheduler.exit()
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.true
+      @scheduler.onHealthCheck (res) ->
+        expect(res.status).to.be.true
+        done()
 
-    it 'should succeed when scheduler has not been started yet', ->
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.true
+    it 'should succeed when scheduler has not been started yet', (done) ->
+      @scheduler.onHealthCheck (res) ->
+        expect(res.status).to.be.true
+        done()
 
-    it 'should fail when last run time is too old', ->
+    it 'should fail when last run time is too old', (done) ->
       sinon.stub @scheduler, '_initSchedulerRoot', ->
       sinon.stub @scheduler, '_renderDefaultView', ->
       win =
@@ -426,15 +428,16 @@ describe 'Scheduler', ->
       # Move the clock more than HC_LAST_RUN_THRESHOLD.
       timePassed = 6 * 60 * 1000
       @clock.tick timePassed
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.false
-      expect(res.reason).to.match /Scheduler has stopped working/
-      @scheduler._run()
-      expect(@scheduler._lastRunTime).to.be.equal @now + timePassed
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.true
+      @scheduler.onHealthCheck (res) =>
+        expect(res.status).to.be.false
+        expect(res.reason).to.match /Scheduler has stopped working/
+        @scheduler._run()
+        expect(@scheduler._lastRunTime).to.be.equal @now + timePassed
+        @scheduler.onHealthCheck (res) ->
+          expect(res.status).to.be.true
+          done()
 
-    it 'should not fail due to black screens if application just started', ->
+    it 'should not fail due to black screens if application just started', (done) ->
       sinon.stub @scheduler, '_initSchedulerRoot', ->
       sinon.stub @scheduler, '_renderDefaultView', ->
       win =
@@ -442,13 +445,14 @@ describe 'Scheduler', ->
       doc =
         body: 'test'
       @scheduler.start win, doc
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.true
-      @scheduler._consecutiveBlackScreens = 1000
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.true
+      @scheduler.onHealthCheck (res) =>
+        expect(res.status).to.be.true
+        @scheduler._consecutiveBlackScreens = 1000
+        @scheduler.onHealthCheck (res) ->
+          expect(res.status).to.be.true
+          done()
 
-    it 'should fail if number of black screens exceed the threshold', ->
+    it 'should fail if number of black screens exceed the threshold', (done) ->
       sinon.stub @scheduler, '_initSchedulerRoot', ->
       sinon.stub @scheduler, '_renderDefaultView', ->
       win =
@@ -456,20 +460,21 @@ describe 'Scheduler', ->
       doc =
         body: 'test'
       @scheduler.start win, doc
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.true
-      @scheduler._consecutiveBlackScreens = 1000
-      @scheduler._run()
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.true
-      @clock.tick 6 * 60 * 1000
-      # this is needed to bypass the _run() health check.
-      @scheduler._run()
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.false
-      expect(res.reason).to.match /Application is rendering black screens/
+      @scheduler.onHealthCheck (res) =>
+        expect(res.status).to.be.true
+        @scheduler._consecutiveBlackScreens = 1000
+        @scheduler._run()
+        @scheduler.onHealthCheck (res) =>
+          expect(res.status).to.be.true
+          @clock.tick 6 * 60 * 1000
+          # this is needed to bypass the _run() health check.
+          @scheduler._run()
+          @scheduler.onHealthCheck (res) ->
+            expect(res.status).to.be.false
+            expect(res.reason).to.match /Application is rendering black screens/
+            done()
 
-    it 'should succeed when all health checks passes', ->
+    it 'should succeed when all health checks passes', (done) ->
       sinon.stub @scheduler, '_initSchedulerRoot', ->
       sinon.stub @scheduler, '_renderDefaultView', ->
       win =
@@ -479,8 +484,9 @@ describe 'Scheduler', ->
       @scheduler.start win, doc
       @scheduler._consecutiveBlackScreens = 0
       @scheduler._run()
-      res = @scheduler.onHealthCheck()
-      expect(res.status).to.be.true
+      @scheduler.onHealthCheck (res) ->
+        expect(res.status).to.be.true
+        done()
 
   describe '_run', ->
     it 'should show the default view if there are no views', ->
