@@ -489,22 +489,27 @@ describe 'Scheduler', ->
         done()
 
   describe '_run', ->
+    beforeEach ->
+      @time = new Date().getTime()
+      @clock = sinon.useFakeTimers(@time)
+
+    afterEach ->
+      @clock.restore()
+
     it 'should show the default view if there are no views', ->
       renderDefaultView = sinon.stub @scheduler, '_renderDefaultView', ->
       @scheduler._run()
       expect(renderDefaultView).to.have.been.calledOnce
 
-    it 'should set the last run time', (done) ->
+    it 'should set the last run time', ->
       sinon.stub @scheduler, '_renderDefaultView', ->
-      expect(@scheduler._lastRunTime).to.equal 0
+      expect(@scheduler._lastRunTime).to.equal @time
+      @clock.tick 1000
       @scheduler._run()
-      expect(@scheduler._lastRunTime).to.be.above 0
-      lr = @scheduler._lastRunTime
-      t = =>
-        @scheduler._run()
-        expect(@scheduler._lastRunTime).to.be.above lr
-        done()
-      setTimeout t, 10
+      expect(@scheduler._lastRunTime).to.equal (@time + 1000)
+      @clock.tick 1000
+      @scheduler._run()
+      expect(@scheduler._lastRunTime).to.equal (@time + 2000)
 
   describe '_tryToRenderCurrent', ->
     it 'should return when viewOrder is empty', ->

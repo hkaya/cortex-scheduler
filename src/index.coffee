@@ -52,7 +52,7 @@ class Scheduler
     @_exit = false
     @_started = false
     @_schedulerStartTime = 0
-    @_lastRunTime = 0
+    @_lastRunTime = new Date().getTime()
     @_consecutiveBlackScreens = 0
 
   exit: ->
